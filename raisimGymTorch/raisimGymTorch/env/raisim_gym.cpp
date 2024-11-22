@@ -28,6 +28,7 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
     .def("isTerminalState", &VectorizedEnvironment<ENVIRONMENT>::isTerminalState)
     .def("setSimulationTimeStep", &VectorizedEnvironment<ENVIRONMENT>::setSimulationTimeStep)
     .def("setControlTimeStep", &VectorizedEnvironment<ENVIRONMENT>::setControlTimeStep)
+    .def("setItrNumber", &VectorizedEnvironment<ENVIRONMENT>::setItrNumber)
     .def("getObDim", &VectorizedEnvironment<ENVIRONMENT>::getObDim)
     .def("getActionDim", &VectorizedEnvironment<ENVIRONMENT>::getActionDim)
     .def("getNumOfEnvs", &VectorizedEnvironment<ENVIRONMENT>::getNumOfEnvs)
@@ -35,5 +36,7 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
     .def("turnOffVisualization", &VectorizedEnvironment<ENVIRONMENT>::turnOffVisualization)
     .def("stopRecordingVideo", &VectorizedEnvironment<ENVIRONMENT>::stopRecordingVideo)
     .def("startRecordingVideo", &VectorizedEnvironment<ENVIRONMENT>::startRecordingVideo)
-    .def("curriculumUpdate", &VectorizedEnvironment<ENVIRONMENT>::curriculumUpdate);
+    .def("curriculumUpdate", &VectorizedEnvironment<ENVIRONMENT>::curriculumUpdate)
+    .def("getDis", &VectorizedEnvironment<ENVIRONMENT>::getDis)
+    .def("getRewardInfo", &VectorizedEnvironment<ENVIRONMENT>::getRewardInfo);
 }

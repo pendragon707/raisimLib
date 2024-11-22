@@ -38,7 +38,7 @@ class RaisimGymEnv {
 
   /////// implement these methods /////////
   virtual void init() = 0;
-  virtual void reset() = 0;
+  virtual void reset(bool resample_target_speed) = 0;
   virtual void observe(Eigen::Ref<EigenVec> ob) = 0;
   virtual float step(const Eigen::Ref<EigenVec>& action) = 0;
   virtual bool isTerminalState(float& terminalReward) = 0;
@@ -51,6 +51,7 @@ class RaisimGymEnv {
   ////////////////////////////////
 
   void setSimulationTimeStep(double dt) { simulation_dt_ = dt; world_->setTimeStep(dt); }
+  void setItrNumber(int number) { itr_number = number;}
   void setControlTimeStep(double dt) { control_dt_ = dt; }
   int getObDim() { return obDim_; }
   int getActionDim() { return actionDim_; }
@@ -69,6 +70,7 @@ class RaisimGymEnv {
   std::string resourceDir_;
   Yaml::Node cfg_;
   int obDim_=0, actionDim_=0;
+  int itr_number = 0;
   std::unique_ptr<raisim::RaisimServer> server_;
 };
 

@@ -20,9 +20,9 @@ class VectorizedEnvironment {
   explicit VectorizedEnvironment(std::string resourceDir, std::string cfg)
       : resourceDir_(resourceDir) {
     Yaml::Parse(cfg_, cfg);
-	raisim::World::setActivationKey(raisim::Path(resourceDir + "/activation.raisim").getString());
-    if(&cfg_["render"])
-      render_ = cfg_["render"].template As<bool>();
+	  raisim::World::setActivationKey(raisim::Path(resourceDir + "/activation.raisim").getString());
+    // if(&cfg_["render"])
+    render_ = cfg_["render"].template As<bool>();
   }
 
   ~VectorizedEnvironment() {
@@ -35,7 +35,7 @@ class VectorizedEnvironment {
     num_envs_ = cfg_["num_envs"].template As<int>();
 
     for (int i = 0; i < num_envs_; i++) {
-      environments_.push_back(new ChildEnvironment(resourceDir_, cfg_, render_ && i == 0));
+      environments_.push_back(new ChildEnvironment(resourceDir_, cfg_, render_ && i == 0, i));
       environments_.back()->setSimulationTimeStep(cfg_["simulation_dt"].template As<double>());
       environments_.back()->setControlTimeStep(cfg_["control_dt"].template As<double>());
     }
@@ -45,7 +45,7 @@ class VectorizedEnvironment {
     for (int i = 0; i < num_envs_; i++) {
       // only the first environment is visualized
       environments_[i]->init();
-      environments_[i]->reset();
+      environments_[i]->reset(true);
     }
 
     obDim_ = environments_[0]->getObDim();
@@ -56,7 +56,7 @@ class VectorizedEnvironment {
   // resets all environments and returns observation
   void reset() {
     for (auto env: environments_)
-      env->reset();
+      env->reset(true);
   }
 
   void observe(Eigen::Ref<EigenRowMajorMat> &ob) {
@@ -72,6 +72,24 @@ class VectorizedEnvironment {
       perAgentStep(i, action, reward, done);
   }
 
+  void getDis(Eigen::Ref<EigenRowMajorMat> &dis){
+#pragma omp parallel for schedule(dynamic)
+    for (int i = 0; i < num_envs_; i++){
+      Eigen::Vector4f dis_vec;
+      environments_[i]->getDis(dis_vec);
+      dis.row(i) = dis_vec;
+    }
+  }
+
+  void getRewardInfo(Eigen::Ref<EigenRowMajorMat> &rewardInfo){
+#pragma omp parallel for schedule(dynamic)
+    for (int i = 0; i < num_envs_; i++){
+      Eigen::Matrix<float, 16, 1> r_vec;
+      environments_[i]->getRewardInfo(r_vec);
+      rewardInfo.row(i) = r_vec;
+    }
+  }
+
   void turnOnVisualization() { if(render_) environments_[0]->turnOnVisualization(); }
   void turnOffVisualization() { if(render_) environments_[0]->turnOffVisualization(); }
   void startRecordingVideo(const std::string& videoName) { if(render_) environments_[0]->startRecordingVideo(videoName); }
@@ -81,6 +99,11 @@ class VectorizedEnvironment {
     int seed_inc = seed;
     for (auto *env: environments_)
       env->setSeed(seed_inc++);
+  }
+
+  void setItrNumber(int number) {
+    for (auto *env: environments_)
+      env->setItrNumber(number);
   }
 
   void close() {
@@ -127,7 +150,7 @@ class VectorizedEnvironment {
     done[agentId] = environments_[agentId]->isTerminalState(terminalReward);
 
     if (done[agentId]) {
-      environments_[agentId]->reset();
+      environments_[agentId]->reset(false);
       reward[agentId] += terminalReward;
     }
   }

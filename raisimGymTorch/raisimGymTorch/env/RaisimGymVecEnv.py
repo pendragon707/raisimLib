@@ -21,6 +21,8 @@ class RaisimGymVecEnv:
         self._reward = np.zeros(self.num_envs, dtype=np.float32)
         self._done = np.zeros(self.num_envs, dtype=np.bool)
         self.rewards = [[] for _ in range(self.num_envs)]
+        self.displacements = np.zeros([self.num_envs, 4], dtype=np.float32)
+        self.reward_info = np.zeros([self.num_envs, 16], dtype=np.float32)
 
     def seed(self, seed=None):
         self.wrapper.setSeed(seed)
@@ -44,11 +46,72 @@ class RaisimGymVecEnv:
         self.wrapper.step(action, self._reward, self._done)
         return self._reward.copy(), self._done.copy()
 
-    def load_scaling(self, dir_name, iteration):
+    def load_scaling(self, dir_name, iteration, policy_type=None, num_g1=None):
+        # policy_tupe 0 is the flat
+        # policy type 1 is the combines
+        # policy type 2 is the blind policy, from which we load encoders
         mean_file_name = dir_name + "/mean" + str(iteration) + ".csv"
         var_file_name = dir_name + "/var" + str(iteration) + ".csv"
-        self.obs_rms.mean = np.loadtxt(mean_file_name, dtype=np.float32)
-        self.obs_rms.var = np.loadtxt(var_file_name, dtype=np.float32)
+        loaded_mean = np.loadtxt(mean_file_name, dtype=np.float32)
+        loaded_var = np.loadtxt(var_file_name, dtype=np.float32)
+        #if policy_type == 0: (for cvpr)
+        #    #self.obs_rms.mean[:,:loaded_mean.shape[1]] = loaded_mean
+        #    #self.obs_rms.var[:,:loaded_var.shape[1]] = loaded_var
+        #    self.obs_rms.mean[:,:loaded_mean.shape[1]] = loaded_mean
+        #    self.obs_rms.var[:,:loaded_var.shape[1]] = loaded_var
+        if policy_type == 0:
+            assert num_g1 is not None, "You should provide num_g1"
+            processed_mean = np.zeros_like(self.obs_rms.mean[:,self.obs_rms.mean.shape[1]//2:])
+            processed_var = np.zeros_like(self.obs_rms.var[:,self.obs_rms.mean.shape[1]//2:])
+            blind_mean = loaded_mean[:,loaded_mean.shape[1]//2:]
+            blind_var = loaded_var[:,loaded_var.shape[1]//2:]
+            g1_mean = blind_mean[:,-5:-3]
+            g1_var = loaded_var[:,-5:-3]
+            for i in range(num_g1+1):
+                start = -3 - 2*i
+                end = -1 - 2*i
+                processed_mean[:,start:end] = g1_mean
+                processed_var[:,start:end] = g1_var
+            # copy action + prop+part
+            processed_mean[:,:start] = blind_mean[:,:-5]
+            processed_var[:,:start] = blind_var[:,:-5]
+            # do not normalize slope
+            processed_mean[:,-1] = 0.0
+            processed_var[:,-1] = 1.0
+            self.obs_rms.mean[:,:self.obs_rms.mean.shape[1]//2] = processed_mean
+            self.obs_rms.var[:,:self.obs_rms.mean.shape[1]//2] = processed_var
+        elif policy_type == 1:
+            self.obs_rms.mean[:,self.obs_rms.mean.shape[1]//2:] = loaded_mean[:,self.obs_rms.mean.shape[1]//2:]
+            self.obs_rms.var[:,self.obs_rms.mean.shape[1]//2:] = loaded_var[:,self.obs_rms.mean.shape[1]//2:]
+        elif policy_type == 2:
+            assert num_g1 is not None, "You should provide num_g1"
+            processed_mean = np.zeros_like(self.obs_rms.mean[:,self.obs_rms.mean.shape[1]//2:])
+            processed_var = np.zeros_like(self.obs_rms.var[:,self.obs_rms.mean.shape[1]//2:])
+            blind_mean = loaded_mean[:,loaded_mean.shape[1]//2:]
+            blind_var = loaded_var[:,loaded_var.shape[1]//2:]
+            g1_mean = blind_mean[:,-5:-3]
+            g1_var = loaded_var[:,-5:-3]
+            for i in range(num_g1+1):
+                start = -3 - 2*i
+                end = -1 - 2*i
+                processed_mean[:,start:end] = g1_mean
+                processed_var[:,start:end] = g1_var
+            # copy action + prop+part
+            processed_mean[:,:start] = blind_mean[:,:-5]
+            processed_var[:,:start] = blind_var[:,:-5]
+            # do not normalize slope
+            processed_mean[:,-1] = 0.0
+            processed_var[:,-1] = 1.0
+            self.obs_rms.mean[:,self.obs_rms.mean.shape[1]//2:] = processed_mean
+            self.obs_rms.var[:,self.obs_rms.mean.shape[1]//2:] = processed_var
+        else:
+            # All other cases including dagger and so
+            self.obs_rms.mean = loaded_mean
+            self.obs_rms.var = loaded_var
+        # duplicate
+        #self.obs_rms.mean = np.tile(self.obs_rms.mean, [1,2])
+        #self.obs_rms.var = np.tile(self.obs_rms.var, [1,2])
+
 
     def save_scaling(self, dir_name, iteration):
         mean_file_name = dir_name + "/mean" + iteration + ".csv"
@@ -79,6 +142,14 @@ class RaisimGymVecEnv:
         else:
             return obs
 
+    def get_dis(self):
+        self.wrapper.getDis(self.displacements)
+        return self.displacements.copy()
+    
+    def get_reward_info(self):
+        self.wrapper.getRewardInfo(self.reward_info)
+        return self.reward_info.copy()
+
     def reset_and_update_info(self):
         return self.reset(), self._update_epi_info()
 
@@ -99,6 +170,9 @@ class RaisimGymVecEnv:
 
     def curriculum_callback(self):
         self.wrapper.curriculumUpdate()
+
+    def set_itr_number(self, itr_number):
+        self.wrapper.setItrNumber(itr_number)
 
     @property
     def num_envs(self):
@@ -123,24 +197,32 @@ class RunningMeanStd(object):
         self.count = epsilon
 
     def update(self, arr):
-        batch_mean = np.mean(arr, axis=0)
-        batch_var = np.var(arr, axis=0)
+        batch_mean = np.mean(arr[:,self.mean.shape[1]//2:], axis=0)
+        batch_var = np.var(arr[:,self.var.shape[1]//2:], axis=0)
         batch_count = arr.shape[0]
         self.update_from_moments(batch_mean, batch_var, batch_count)
 
     def update_from_moments(self, batch_mean, batch_var, batch_count):
-        delta = batch_mean - self.mean
+        half_mean = self.mean[:,self.mean.shape[1]//2:]
+        half_var = self.var[:,self.var.shape[1]//2:]
+        delta = batch_mean - half_mean
         tot_count = self.count + batch_count
 
-        new_mean = self.mean + delta * batch_count / tot_count
-        m_a = self.var * self.count
+        new_mean = half_mean + delta * batch_count / tot_count
+        m_a = half_var * self.count
         m_b = batch_var * batch_count
         m_2 = m_a + m_b + np.square(delta) * (self.count * batch_count / (self.count + batch_count))
         new_var = m_2 / (self.count + batch_count)
 
         new_count = batch_count + self.count
 
-        self.mean = new_mean
-        self.var = new_var
+        self.mean[:,self.mean.shape[1]//2:] = new_mean
+        self.var[:,self.var.shape[1]//2:] = new_var
+        # account for the slope information
+        self.mean[:,-1] = 0
+        self.var[:,-1] = 1
+        # duplicate future and present geometry
+        self.mean[:,-5:-3] = self.mean[:,-3:-1]
+        self.var[:,-5:-3] = self.var[:,-3:-1]
         self.count = new_count
 

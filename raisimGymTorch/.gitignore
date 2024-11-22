@@ -14,4 +14,11 @@ raisimGymTorch/env/data/*
 .vscode/*
 id_rsa
 */data/*
-raisimGymTorch/env/bin/rsg*
+log_*
+raisimGymTorch/env/bin/*_debug_app
+*.png
+*.zip
+.DS_Store
+runs*/
+plots/
+data_rss/
