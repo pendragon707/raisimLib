@@ -10,6 +10,7 @@ MACRO(SUBDIRLIST result curdir)
     SET(dirlist "")
     LIST(APPEND dirlist rsg_go1_task)
     LIST(APPEND dirlist dagger_go1)
+    LIST(APPEND dirlist debug_go1)
     SET(${result} ${dirlist})
 ENDMACRO()
 
