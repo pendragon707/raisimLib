@@ -17,12 +17,6 @@
 #include <fenv.h>
 #include <stdexcept>
 
-template <typename T>
-inline void scaling(T &n, const T &max_src, const T &max_dst)
-{
-  n = n / max_src * max_dst;
-}
-
 inline void quatToEuler(const raisim::Vec<4> &quat, Eigen::Vector3d &eulerVec)
 {
   double qw = quat[0], qx = quat[1], qy = quat[2], qz = quat[3];
@@ -99,13 +93,11 @@ namespace raisim
       
       // randomize terrains
       gc_init_ << 0, 0, 0.44, 1.0, 0.0, 0.0, 0.0, jt_mean_pos;
-      std::cout << "Gc init: " << gc_init_ << std::endl;
 
       /// set pd gains
-      // std::cout << "Pid coeffs " <<  pid_coeff << std::endl;
       pgain = pid_coeff;
       dgain = 0.6;
-      std::cout << "pgain: " <<  pgain << " dgain: " << dgain << std::endl;
+
       Eigen::VectorXd jointPgain(gvDim_), jointDgain(gvDim_);
       jointPgain.setZero();
       jointPgain.tail(nJoints_).setConstant(pgain);
@@ -126,7 +118,6 @@ namespace raisim
 
       /// action & observation scaling
       actionMean_ = gc_init_.tail(nJoints_);
-      std::cout << "actionMean_: " << actionMean_ << std::endl;
       double act_std_val = 0.4;
       actionStd_.setConstant(act_std_val);
       
