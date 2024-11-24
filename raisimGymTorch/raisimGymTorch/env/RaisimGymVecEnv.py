@@ -121,7 +121,7 @@ class RaisimGymVecEnv:
 
     def observe(self, update_mean=True):
         self.wrapper.observe(self._observation)
-
+        
         if self.normalize_ob:
             if update_mean:
                 self.obs_rms.update(self._observation)
@@ -136,9 +136,9 @@ class RaisimGymVecEnv:
 
     def _normalize_observation(self, obs):
         if self.normalize_ob:
-
-            return np.clip((obs - self.obs_rms.mean) / np.sqrt(self.obs_rms.var + 1e-8), -self.clip_obs,
-                           self.clip_obs)
+            norm_obs = np.clip((obs - self.obs_rms.mean) / np.sqrt(self.obs_rms.var + 1e-8), -self.clip_obs,
+                                self.clip_obs)
+            return norm_obs
         else:
             return obs
 

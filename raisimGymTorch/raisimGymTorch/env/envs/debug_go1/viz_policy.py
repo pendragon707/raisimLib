@@ -30,7 +30,6 @@ cfg['environment']['render'] = True
 #cfg['environment']['speedTest'] = False
 
 base_dims = cfg['environment']['baseDim']
-n_futures = cfg['environment']['n_futures']
 cfg['environment']['test'] = True
 t_steps = cfg['environment']['history_len']
 
@@ -65,8 +64,6 @@ env.load_scaling(base_dir, int(runid))
 prop_loaded_encoder = torch.jit.load(prop_enc_pth)
 loaded_mlp = torch.jit.load(mlp_pth)
 
-
-
 print("Visualizing and evaluating the current policy")
 eplen = 0
 for update in range(1):
@@ -79,12 +76,15 @@ for update in range(1):
         time.sleep(0.01)
         obs = env.observe(False)
         
+        print('obs', obs.shape)
         obs_torch = torch.from_numpy(obs).cpu()
+        print('obs torch', obs_torch.shape)
         with torch.no_grad():
             if step%2 == 0:
                 latent_p = prop_loaded_encoder(obs_torch[:,:base_dims*t_steps])
             action_ll = loaded_mlp(torch.cat([obs_torch[:,base_dims*t_steps : base_dims*(t_steps + 1)],
                                               latent_p], 1))
+        print(action_ll.shape)
         reward_ll, dones = env.step(action_ll.cpu().detach().numpy())
         eplen+=1
         work = env.get_reward_info()[0][-1]

@@ -236,18 +236,14 @@ namespace raisim
       quat[3] = gc_[6];
       
       quatToEuler(quat, bodyOrientation_);
+    
       obDouble_ << bodyOrientation_.head(2),
           gc_.tail(12), /// joint angles
           gv_.tail(12),
           act_history[act_history.size() - 1],
           0.0, 0.0, 0.0, //speed_vec,
-          0.0, //(double)includeGRF * grf_bin_obs,
-          0.0, //mass_params,
-	        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,//motor_strength,
-          0.0, //friction,
-          0.0, 0.0, 0.0, //avgXYVel, avgYawVel,
-          0.0, 0.0, 0.0, 0.0, //slope_dots,
-          0.0; //isSlope;
+          0.0; //(double)includeGRF * grf_bin_obs,
+          
 
       obs_history.push_back(obDouble_);
     }
@@ -262,6 +258,7 @@ namespace raisim
         ob_concat.segment(baseDim * i, baseDim) << obs_history[vec_size - lag - history_len + i].head(baseDim);
       }
       ob_concat.tail(base_obDim_) << ob_delay;
+
       ob = ob_concat.cast<float>();
     }
 
@@ -282,10 +279,10 @@ namespace raisim
     Eigen::Vector3d mass_params;
     Eigen::VectorXd jt_mean_pos;
     
-    double pgain = 50.;
-    double dgain = 0.6;
+    double pgain;
+    double dgain;
     
-    int nFoot = 0;
+    int nFoot;
     
     std::vector<double> base_mass_list;
     
@@ -293,7 +290,7 @@ namespace raisim
     std::deque<Eigen::VectorXd> act_history;
     
     int baseDim;
-    double pid_coeff = 55;
+    double pid_coeff;
 
     int base_obDim_;
     Eigen::VectorXd ob_concat;
