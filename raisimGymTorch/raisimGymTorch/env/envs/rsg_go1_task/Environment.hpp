@@ -441,165 +441,6 @@ namespace raisim
                                  terrainProp_.xSize, +terrainProp_.xSize / 3 + 1.0, 0.0, heights_, "terrain");
     }
 
-    void add_stairs()
-    {
-      isSlope = true;
-      sampleCmds = false;
-      int max_height_idx = std::max(1, (int)((itr_number - start_itr_stairs) / 1000));
-      max_height_idx = std::min(max_height_idx, (int)step_height_list.size());
-      canonical_step_height = step_height_list[std::rand() % max_height_idx];
-      double sign = 1;
-      useRef = true;
-      isDown = false;
-      bool down;
-      if (isEval)
-       down = Eigen::VectorXd::Random(1)[0] > 0;
-      else
-       down = Eigen::VectorXd::Random(1)[0] > -0.5;
-      if (down){
-        sign = -1.;
-	      useRef = false;
-	      isDown = true;
-      	max_height_idx = std::min(max_height_idx, ((int)step_height_list.size()-3));
-      	canonical_step_height = step_height_list[std::rand() % max_height_idx];
-      }
-      double stepHeight = sign * canonical_step_height; // 0.03 + sign * 0.05 * Eigen::VectorXd::Random(1)[0];
-
-      // now step lenght
-      double stepLength = step_length_list[std::rand() % max_step_idx];
-
-      // fractal first
-      raisim::TerrainProperties terrainProperties;
-      terrainProperties.frequency = 20; // 10
-
-      double zscale_val = 0.0;
-      if (isDown)
-	zscale_val = 0.20;
-      if (isTest)
-        zscale_val = 0.0;
-
-
-      terrainProperties.zScale = zscale_val;
-      terrainProperties.xSize = 12; // maybe 12
-      terrainProperties.ySize = 12;
-      terrainProperties.xSamples = 200; // maybe 200
-      terrainProperties.ySamples = 200;
-      terrainProperties.fractalOctaves = 2;
-      terrainProperties.fractalLacunarity = 2.0;
-      terrainProperties.fractalGain = 0.25;
-      hm_ = world_->addHeightMap(0.0, 0.0, terrainProperties);
-
-      double pixelSize_ = 0.02;
-      double gridSize_ = 0.025;
-      raisim::TerrainProperties terrainProp_;
-      terrainProp_.xSize = 12.0;
-      terrainProp_.ySize = 12.0;
-      terrainProp_.xSamples = terrainProp_.xSize / pixelSize_;
-      terrainProp_.ySamples = terrainProp_.ySize / pixelSize_;
-
-      std::vector<double> heights_;
-      heights_.resize(terrainProp_.xSamples * terrainProp_.ySamples);
-
-      int N = (int)(stepLength / pixelSize_);
-      int mids = (int)(1.2 / pixelSize_);
-      int mid0 = 0.5 * terrainProp_.xSamples - (int)(1.2 / pixelSize_);
-      int mid1 = 0.5 * terrainProp_.xSamples + (int)(0.0 / pixelSize_);
-      double max = 0.2;
-      double stepStart = max; // stepHeight; // * (mid0 / N);
-      int cnt = 0;
-      bool chamfer = false;
-      // start platform
-      for (int x = 0; x < mids; x++)
-      {
-        for (int y = 0; y < terrainProp_.xSamples; y++)
-        {
-          size_t idx = x * terrainProp_.xSamples + y;
-          heights_[idx] = max;
-        }
-      }
-
-      for (int x = mids; x < mid0; x++)
-      {
-        if (cnt == N)
-        {
-          stepStart = max;
-          cnt = 0;
-        }
-        if (cnt == 0 && Eigen::VectorXd::Random(1)[0] < 0)
-          chamfer = true;
-        else
-          chamfer = false;
-        for (int y = 0; y < terrainProp_.xSamples; y++)
-        {
-          size_t idx = x * terrainProp_.xSamples + y;
-          max = stepStart + stepHeight;
-          heights_[idx] = max;
-          if (chamfer)
-            heights_[idx] -= gridSize_;
-        }
-        cnt++;
-      }
-
-      for (int x = mid0; x < mid1; x++)
-      {
-        for (int y = 0; y < terrainProp_.xSamples; y++)
-        {
-          size_t idx = x * terrainProp_.xSamples + y;
-          heights_[idx] = max;
-        }
-      }
-
-      cnt = N;
-      for (int x = mid1; x < terrainProp_.ySamples; x++)
-      {
-        if (cnt == N)
-        {
-          stepStart = max;
-          cnt = 0;
-        }
-        if (cnt == 0 && Eigen::VectorXd::Random(1)[0] < 0)
-          chamfer = true;
-        else
-          chamfer = false;
-        for (int y = 0; y < terrainProp_.xSamples; y++)
-        {
-          size_t idx = x * terrainProp_.xSamples + y;
-          max = stepStart + stepHeight;
-          heights_[idx] = max;
-          if (chamfer)
-            heights_[idx] -= gridSize_;
-        }
-        cnt++;
-      }
-
-      Eigen::Map<Eigen::Matrix<double, -1, -1>> mapMat(heights_.data(),
-                                                       terrainProp_.xSamples,
-                                                       terrainProp_.ySamples);
-      Eigen::Map<Eigen::Matrix<double, -1, 1>> mapVec(heights_.data(),
-                                                      terrainProp_.xSamples * terrainProp_.ySamples,
-                                                      1);
-      Eigen::MatrixXd transMat = mapMat.transpose();
-      Eigen::Map<Eigen::Matrix<double, -1, 1>> transVec(transMat.data(), terrainProp_.xSamples * terrainProp_.ySamples, 1);
-      mapVec = transVec;
-
-      for (size_t i = 0; i < terrainProp_.xSamples; i++)
-      {
-        for (size_t j = 0; j < terrainProp_.ySamples; j++)
-        {
-          double xidx = i * pixelSize_ - terrainProp_.xSize / 2;
-          double yidx = j * pixelSize_ - terrainProp_.ySize / 2;
-          heights_[j * terrainProp_.xSamples + i] += hm_->getHeight(xidx, yidx);
-        }
-      }
-
-      world_->removeObject(hm_);
-
-      hm_ = world_->addHeightMap(terrainProp_.ySamples,
-                                 terrainProp_.xSamples,
-                                 terrainProp_.ySize,
-                                 terrainProp_.xSize, terrainProp_.xSize / 2 - 0.6, 0.0, heights_, "terrain");
-    }
-
     void randomize_sim_params()
     {
       if (randomize_friction)
@@ -688,7 +529,7 @@ namespace raisim
       terrainProperties.fractalOctaves = 2;
       terrainProperties.fractalLacunarity = 2.0;
       terrainProperties.fractalGain = 0.25;
-      hm_ = world_->addHeightMap(Eigen::VectorXd::Random(1)[0] + 4, Eigen::VectorXd::Random(1)[0], terrainProperties); // maybe revisit
+      hm_ = world_->addHeightMap(Eigen::VectorXd::Random(1)[0] - 4, Eigen::VectorXd::Random(1)[0], terrainProperties); // maybe revisit
       tparams[0] = 1;
       tparams[1] = 0.;
       tparams[2] = 0.;
@@ -842,13 +683,7 @@ namespace raisim
             rand_terrain_select = std::rand() % 100; // 2 + 1; // either step or terrains
           }
 
-	     if (isEval) {
-	       if (rand_terrain_select < 30) add_random_terrain();
-	       else if (rand_terrain_select < 100) add_stairs();
-	     } else {
-	       if (rand_terrain_select < 40) add_random_terrain();
-	       else if (rand_terrain_select < 100) add_stairs();
-	     }
+	        add_random_terrain();
         }
       }
 
@@ -954,10 +789,10 @@ namespace raisim
     double compute_forward_reward()
     {
       double r = 0.;
-      double forward_r = adaptiveForwardVelRewardCoeff_ * std::min(max_speed, bodyLinearVel_[0]);
+      double forward_r = adaptiveForwardVelRewardCoeff_ * std::min(max_speed, -bodyLinearVel_[0]);
       // Do not go too fast, but track!
-      if (isDown && bodyLinearVel_[0] > (max_speed+0.1))
-      	forward_r -= adaptiveForwardVelRewardCoeff_ * (bodyLinearVel_[0] - max_speed);
+      // if (isDown && bodyLinearVel_[0] > (max_speed+0.1))
+      // 	forward_r -= adaptiveForwardVelRewardCoeff_ * (bodyLinearVel_[0] - max_speed);
       double angular_r = adaptiveAngularVelRewardCoeff_ * (-std::abs(ang_speed - bodyAngularVel_[2]) + std::abs(ang_speed));
       r += forward_r;
       r += -abs(bodyLinearVel_[1]);

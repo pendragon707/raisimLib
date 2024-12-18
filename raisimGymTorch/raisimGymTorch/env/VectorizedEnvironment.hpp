@@ -72,10 +72,11 @@ class VectorizedEnvironment {
       perAgentStep(i, action, reward, done);
   }
 
-  void getDis(Eigen::Ref<EigenRowMajorMat> &dis){
+ void getDis(Eigen::Ref<EigenRowMajorMat> &dis){
 #pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < num_envs_; i++){
       Eigen::Vector4f dis_vec;
+      environments_[i]->getDis(dis_vec);
       dis.row(i) = dis_vec;
     }
   }
@@ -84,6 +85,7 @@ class VectorizedEnvironment {
 #pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < num_envs_; i++){
       Eigen::Matrix<float, 16, 1> r_vec;
+      environments_[i]->getRewardInfo(r_vec);
       rewardInfo.row(i) = r_vec;
     }
   }

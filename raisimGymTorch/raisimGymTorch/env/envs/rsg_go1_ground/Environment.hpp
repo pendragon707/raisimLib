@@ -44,14 +44,6 @@ inline void quatToEuler(const raisim::Vec<4> &quat, Eigen::Vector3d &eulerVec)
   eulerVec[2] = std::atan2(siny_cosp, cosy_cosp);
 }
 
-inline void eulerToRot(const Eigen::Vector3d &eulerVec, Eigen::Matrix3d &rot)
-{
-  double roll = eulerVec[0], pitch = eulerVec[1], yaw = eulerVec[2];
-  Eigen::Quaterniond q;
-  q = Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX()) * Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) * Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ());
-  rot = q.matrix();
-}
-
 namespace raisim
 {
 
@@ -74,14 +66,11 @@ namespace raisim
       READ_YAML(bool, includeGRF, cfg["includeGRF"])
       READ_YAML(int, baseDim, cfg["baseDim"])
       READ_YAML(int, geomDim, cfg["geomDim"])
-      READ_YAML(int, n_futures, cfg["n_futures"])
-      READ_YAML(int, history_len, cfg["history_len"])
 
       READ_YAML(bool, randomize_friction, cfg["randomize_friction"])
       READ_YAML(bool, randomize_mass, cfg["randomize_mass"])
       READ_YAML(bool, randomize_motor_strength, cfg["randomize_motor_strength"])
       READ_YAML(bool, randomize_gains, cfg["randomize_gains"])
-      READ_YAML(bool, randomize_yaw, cfg["randomize_yaw"])
       READ_YAML(bool, use_priv_vel, cfg["use_priv_vel"])
       READ_YAML(bool, use_slope_dots, cfg["use_slope_dots"])
 
@@ -92,13 +81,12 @@ namespace raisim
       READ_YAML(double, slope_th, cfg["slope_threshold"])
       READ_YAML(double, target_start_speed, cfg["target_start_speed"])
       READ_YAML(double, target_speed_period, cfg["target_speed_period"])
+      READ_YAML(bool, observe_base_speed, cfg["observe_base_speed"])
       READ_YAML(double, bodyLinearVel_avg_weight, cfg["bodyLinearVel_avg_weight"])
       READ_YAML(bool, speedTest, cfg["speedTest"])
       READ_YAML(bool, target_speed_curriculum, cfg["target_speed_curriculum"])
-      READ_YAML(bool, quantizeVel, cfg["quantizeVel"])
 
       /// Reward coefficients
-      READ_YAML(double, alive_bonus, cfg["alive_bonus"])
       READ_YAML(double, forwardVelRewardCoeff_, cfg["forwardVelRewardCoeff"])
       READ_YAML(double, lateralVelRewardCoeff_, cfg["lateralVelRewardCoeff"])
       READ_YAML(double, angularVelRewardCoeff_, cfg["angularVelRewardCoeff"])
@@ -124,6 +112,7 @@ namespace raisim
       READ_YAML(double, lat_speed, cfg["lat_speed"])
       READ_YAML(double, ang_speed, cfg["ang_speed"])
       READ_YAML(double, terrain_freq, cfg["terrainFreq"])
+      READ_YAML(double, alive_bonus, cfg["aliveBonus"])
 
       go1_ = world_->addArticulatedSystem(resourceDir_ + "/go1/urdf/go1.urdf");
       go1_->setName("go1");
@@ -182,16 +171,17 @@ namespace raisim
       jointDgain.tail(nJoints_).setConstant(dgain);
       go1_->setPdGains(jointPgain, jointDgain);
       go1_->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
+      num_g1 = (int)g1_position.size();
+      // prior policy input
+      obDim_ = 42 + (int)privinfo * (20 + 3 * (int)use_priv_vel + nFoot * (int)use_slope_dots + 1 + 2*(num_g1 -1));
+      // trained policy input
+      obDim_ += baseDim + (int)privinfo * (20 + 3 * (int)use_priv_vel + nFoot * (int)use_slope_dots + 1 + 2*(num_g1-1));
 
-      /// MUST BE DONE FOR ALL ENVIRONMENTS
-      base_obDim_ = baseDim + (int)privinfo * (20 + 3 * (int)use_priv_vel + nFoot * (int)use_slope_dots + 1); // added step
-      obDim_ = baseDim * history_len + base_obDim_;
       actionDim_ = nJoints_;
       actionMean_.setZero(actionDim_);
       actionStd_.setZero(actionDim_), invActionStd_.setZero(actionDim_);
-      obDouble_.setZero(base_obDim_);
-      ob_delay.setZero(base_obDim_);
-      ob_concat.setZero(obDim_);
+      obDouble_.setZero(obDim_);
+      ob_delay.setZero(obDim_);
 
       /// action & observation scaling
       actionMean_ = gc_init_.tail(nJoints_);
@@ -208,7 +198,7 @@ namespace raisim
 
         if (isTest && use_slope_dots)
         { // TODO
-          for (int visual_i = 0; visual_i < nFoot; visual_i++)
+          for (int visual_i = 0; visual_i < (nFoot + 2*(num_g1 -1)); visual_i++)
           {
             visual_scan_dots.push_back(server_->addVisualSphere("viz_sphere_" + std::to_string(visual_i),
                                                                 0.1, 1, 0, 0, 1));
@@ -234,20 +224,26 @@ namespace raisim
 
     void randomize_terrain()
     {
-          add_random_terrain();
-          gc_init_ << 0, 0, 0.6, 1.0, 0.0, 0.0, 0.0, jt_mean_pos;
+      // this function is only called to initialize terrains.
+      // it is not called later in the training
+      add_random_terrain();
+      gc_init_ << 0, 0, 0.6, 1.0, 0.0, 0.0, 0.0, jt_mean_pos;
     }
 
     void add_steps()
     {
-      double sample_list[7] = {0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5};
-      double stepSize = sample_list[std::rand() % 7];
-      double stepHeight = 0.025 + 0.075 * Eigen::VectorXd::Random(1)[0];
+      isSlope = true;
+      sampleCmds = true;
+      useRef = false;
+      isDown = false;
+      double sample_list[4] = {0.2, 0.3, 0.4, 0.5};
+      double stepSize = sample_list[std::rand() % 4];
+      double stepHeight = 0.15 + 0.05 * Eigen::VectorXd::Random(1)[0];
 
-      double pixelSize_ = 0.1;
+      double pixelSize_ = 0.05;
       raisim::TerrainProperties terrainProp_;
-      terrainProp_.xSize = 10.0;
-      terrainProp_.ySize = 5.0;
+      terrainProp_.xSize = 15.0;
+      terrainProp_.ySize = 15.0;
       terrainProp_.xSamples = terrainProp_.xSize / pixelSize_;
       terrainProp_.ySamples = terrainProp_.ySize / pixelSize_;
 
@@ -267,12 +263,13 @@ namespace raisim
       {
         for (size_t j = 0; j < yNum; j++)
         {
-          double h = Eigen::VectorXd::Random(1)[0] * stepHeight;
+          double h = 0.5 * (1.0 + Eigen::VectorXd::Random(1)[0]) * stepHeight;
 
-          mapMat.block(gridWidth_ * i, gridWidth_ * j, gridWidth_, gridWidth_).setConstant(h);
+          mapMat.block(gridWidth_ * j, gridWidth_ * i, gridWidth_, gridWidth_).setConstant(h);
         }
       }
 
+      mapMat.block(gridWidth_ * (xNum / 2 - 1), gridWidth_ * (yNum / 2 - 1), 2.0 / pixelSize_, 2.0 / pixelSize_).setConstant(0);
 
       hm_ = world_->addHeightMap(terrainProp_.xSamples,
                                  terrainProp_.ySamples,
@@ -282,17 +279,30 @@ namespace raisim
 
     void add_slope()
     {
-      double stepHeight = 0.01 * Eigen::VectorXd::Random(1)[0];
+      isSlope = true;
+      sampleCmds = false;
+      useRef = false;
+      double stepHeight = 0.015 * Eigen::VectorXd::Random(1)[0];
+      double fractal_coeff;
       if (stepHeight >= 0)
-        stepHeight += 0.005;
-      else
-        stepHeight -= 0.005;
+      {
+        stepHeight += 0.01;
+	      isDown = false;
+	      fractal_coeff = 0.3 + 0.05 * Eigen::VectorXd::Random(1)[0];// 0.25,0.35
+	      fractal_coeff /= 10;
+      } else {
+        stepHeight -= 0.01;
+	      isDown = true;
+	      fractal_coeff = 0.425 + 0.075 * Eigen::VectorXd::Random(1)[0];// 0.35,0.5
+	      fractal_coeff /= 10;
+	      stepHeight *= 0.67;
+      }
 
       slope_info = stepHeight;
 
       double pixelSize_ = 0.05;
       raisim::TerrainProperties terrainProp_;
-      terrainProp_.xSize = 15.0;
+      terrainProp_.xSize = 5.;
       terrainProp_.ySize = 15.0;
       terrainProp_.xSamples = terrainProp_.xSize / pixelSize_;
       terrainProp_.ySamples = terrainProp_.ySize / pixelSize_;
@@ -309,7 +319,7 @@ namespace raisim
           if (x < 4 || x > terrainProp_.xSamples - 4 || y < 10 || y > terrainProp_.ySamples - 10)
             heights_[idx] = ht_i - 1.5;
           else
-            heights_[idx] = ht_i + 0.02 * Eigen::VectorXd::Random(1)[0];
+            heights_[idx] = ht_i + fractal_coeff * Eigen::VectorXd::Random(1)[0];
         }
         if (abs(y - (int)terrainProp_.ySamples / 2) > 10)
           ht_i += stepHeight;
@@ -328,7 +338,7 @@ namespace raisim
       hm_ = world_->addHeightMap(terrainProp_.ySamples,
                                  terrainProp_.xSamples,
                                  terrainProp_.ySize,
-                                 terrainProp_.xSize, 0.0, 0.0, heights_, "terrain");
+                                 terrainProp_.xSize, +terrainProp_.ySize/2 - 1, 0.0, heights_, "terrain");
     }
 
     void add_single_step()
@@ -355,8 +365,8 @@ namespace raisim
       int N = (int)(stepLength / pixelSize_);
       int mid0 = 0.5 * terrainProp_.ySamples - (int)(0.5 / pixelSize_);
       int mid1 = 0.5 * terrainProp_.ySamples + (int)(0.7 / pixelSize_);
-      double max = 0.3;
-      double stepStart = max; // stepHeight; // * (mid0 / N);
+      double stepStart = -stepHeight * (mid0 / N);
+      double max = 0.0;
       int cnt = 0;
       bool chamfer = false;
       for (int y = 0; y < mid0; y++)
@@ -431,154 +441,6 @@ namespace raisim
                                  terrainProp_.xSize, +terrainProp_.xSize / 3 + 1.0, 0.0, heights_, "terrain");
     }
 
-    void add_stairs()
-    {
-      isSlope = true;
-      canonical_step_height = step_height_list[std::rand() % max_height_idx];
-      double sign = 1;
-      bool down;
-      down = Eigen::VectorXd::Random(1)[0] > 0;
-      if (down){
-        sign = -1.;
-      	max_height_idx = std::min(max_height_idx, ((int)step_height_list.size()-3));
-      	canonical_step_height = step_height_list[std::rand() % max_height_idx];
-      }
-      double stepHeight = sign * canonical_step_height; // 0.03 + sign * 0.05 * Eigen::VectorXd::Random(1)[0];
-
-      // now step lenght
-      double stepLength = step_length_list[std::rand() % max_step_idx];
-
-      // fractal first
-      raisim::TerrainProperties terrainProperties;
-      terrainProperties.frequency = 20; // 10
-
-      double zscale_val = 0.0;
-      if (down)
-	zscale_val = 0.20;
-      if (isTest || isEval)
-        zscale_val = 0.0;
-
-      terrainProperties.zScale = zscale_val;
-      terrainProperties.xSize = 12; // maybe 12
-      terrainProperties.ySize = 12;
-      terrainProperties.xSamples = 200; // maybe 200
-      terrainProperties.ySamples = 200;
-      terrainProperties.fractalOctaves = 2;
-      terrainProperties.fractalLacunarity = 2.0;
-      terrainProperties.fractalGain = 0.25;
-      hm_ = world_->addHeightMap(0.0, 0.0, terrainProperties);
-
-      double pixelSize_ = 0.02;
-      double gridSize_ = 0.025;
-      raisim::TerrainProperties terrainProp_;
-      terrainProp_.xSize = 12.0;
-      terrainProp_.ySize = 12.0;
-      terrainProp_.xSamples = terrainProp_.xSize / pixelSize_;
-      terrainProp_.ySamples = terrainProp_.ySize / pixelSize_;
-
-      std::vector<double> heights_;
-      heights_.resize(terrainProp_.xSamples * terrainProp_.ySamples);
-
-      int N = (int)(stepLength / pixelSize_);
-      int mids = (int)(1.2 / pixelSize_);
-      int mid0 = 0.5 * terrainProp_.xSamples - (int)(1.2 / pixelSize_);
-      int mid1 = 0.5 * terrainProp_.xSamples + (int)(0.0 / pixelSize_);
-      double max = 0.2;
-      double stepStart = max; // stepHeight; // * (mid0 / N);
-      int cnt = 0;
-      bool chamfer = false;
-      // start platform
-      for (int x = 0; x < mids; x++)
-      {
-        for (int y = 0; y < terrainProp_.xSamples; y++)
-        {
-          size_t idx = x * terrainProp_.xSamples + y;
-          heights_[idx] = max;
-        }
-      }
-
-      for (int x = mids; x < mid0; x++)
-      {
-        if (cnt == N)
-        {
-          stepStart = max;
-          cnt = 0;
-        }
-        if (cnt == 0 && Eigen::VectorXd::Random(1)[0] < 0)
-          chamfer = true;
-        else
-          chamfer = false;
-        for (int y = 0; y < terrainProp_.xSamples; y++)
-        {
-          size_t idx = x * terrainProp_.xSamples + y;
-          max = stepStart + stepHeight;
-          heights_[idx] = max;
-          if (chamfer)
-            heights_[idx] -= gridSize_;
-        }
-        cnt++;
-      }
-
-      for (int x = mid0; x < mid1; x++)
-      {
-        for (int y = 0; y < terrainProp_.xSamples; y++)
-        {
-          size_t idx = x * terrainProp_.xSamples + y;
-          heights_[idx] = max;
-        }
-      }
-
-      cnt = N;
-      for (int x = mid1; x < terrainProp_.ySamples; x++)
-      {
-        if (cnt == N)
-        {
-          stepStart = max;
-          cnt = 0;
-        }
-        if (cnt == 0 && Eigen::VectorXd::Random(1)[0] < 0)
-          chamfer = true;
-        else
-          chamfer = false;
-        for (int y = 0; y < terrainProp_.xSamples; y++)
-        {
-          size_t idx = x * terrainProp_.xSamples + y;
-          max = stepStart + stepHeight;
-          heights_[idx] = max;
-          if (chamfer)
-            heights_[idx] -= gridSize_;
-        }
-        cnt++;
-      }
-
-      Eigen::Map<Eigen::Matrix<double, -1, -1>> mapMat(heights_.data(),
-                                                       terrainProp_.xSamples,
-                                                       terrainProp_.ySamples);
-      Eigen::Map<Eigen::Matrix<double, -1, 1>> mapVec(heights_.data(),
-                                                      terrainProp_.xSamples * terrainProp_.ySamples,
-                                                      1);
-      Eigen::MatrixXd transMat = mapMat.transpose();
-      Eigen::Map<Eigen::Matrix<double, -1, 1>> transVec(transMat.data(), terrainProp_.xSamples * terrainProp_.ySamples, 1);
-      mapVec = transVec;
-
-      for (size_t i = 0; i < terrainProp_.xSamples; i++)
-      {
-        for (size_t j = 0; j < terrainProp_.ySamples; j++)
-        {
-          double xidx = i * pixelSize_ - terrainProp_.xSize / 2;
-          double yidx = j * pixelSize_ - terrainProp_.ySize / 2;
-          heights_[j * terrainProp_.xSamples + i] += hm_->getHeight(xidx, yidx);
-        }
-      }
-
-      world_->removeObject(hm_);
-
-      hm_ = world_->addHeightMap(terrainProp_.ySamples,
-                                 terrainProp_.xSamples,
-                                 terrainProp_.ySize,
-                                 terrainProp_.xSize, terrainProp_.xSize / 2 - 0.6, 0.0, heights_, "terrain");
-    }
-
     void randomize_sim_params()
     {
       if (randomize_friction)
@@ -623,7 +485,7 @@ namespace raisim
       {
         // updated mass variation
         auto mass_rand = 0.5 * (1. + Eigen::VectorXd::Random(1)[0]);
-        go1_->getMass()[0] = 5.7 + 2.0 * mass_rand;
+        go1_->getMass()[0] = 6.0 + 2.0 * mass_rand;
         Eigen::Vector3d com_vec = Eigen::VectorXd::Random(3);
         com_vec(0) = 0.1 * com_vec(0);
         com_vec(1) = 0.05 * com_vec(1);
@@ -651,12 +513,13 @@ namespace raisim
     void add_random_terrain()
     {
       isSlope = false;
+      sampleCmds = true;
+      useRef = true;
+      isDown = false;
       raisim::TerrainProperties terrainProperties;
-      terrainProperties.frequency = 10; // 10
+      terrainProperties.frequency = 0; // 10
 
-      double zscale_val = 0.22; // 0.22
-      if (isTest)
-        zscale_val = 0;
+      double zscale_val = 0; // 0.22
 
       terrainProperties.zScale = zscale_val;
       terrainProperties.xSize = 12; // maybe 12
@@ -680,7 +543,7 @@ namespace raisim
       sample_goal_rand_num = Eigen::VectorXd::Random(1)[0];
       upwardRewardCoeff_ = 0.0;
       if (sample_goal_rand_num > 0.6)
-      {                                                                            // 20%
+      {
         delta_max_speed = -0.5 + 0.15 * (Eigen::VectorXd::Random(1)[0] / 2 + 0.5); // 0. 
         delta_ang_speed = 0.0 * ((std::rand() % 2) * 2 - 1) * (0.6);               // 0. 
         actionRewardCoeff_ = -1.0;
@@ -689,7 +552,7 @@ namespace raisim
         adaptiveAngularVelRewardCoeff_ = 2.0 * angularVelRewardCoeff_;
       }
       else
-      {                                                                  // 90%
+      {
         delta_max_speed = -0.05 + 0.1 * Eigen::VectorXd::Random(1)[0]; // 0.35 ~ 0.55
         delta_ang_speed = 0.4 * Eigen::VectorXd::Random(1)[0];           // -0.4 ~ 0.4
         actionRewardCoeff_ = 0.;
@@ -697,7 +560,7 @@ namespace raisim
         adaptiveAngularVelRewardCoeff_ = angularVelRewardCoeff_;
       }
 
-      if (isSlope)
+      if (not sampleCmds)
       {
         adaptiveForwardVelRewardCoeff_ = forwardVelRewardCoeff_;
         delta_max_speed = -0.05 + 0.05 * Eigen::VectorXd::Random(1)[0]; // 0.4 ~ 0.5
@@ -706,6 +569,7 @@ namespace raisim
 
       max_speed = 0.5 + delta_max_speed;
       ang_speed = 0.0 + delta_ang_speed;
+
 
       speed_vec.setZero();
       speed_vec << delta_max_speed, delta_ang_speed, delta_max_speed, delta_ang_speed;
@@ -721,81 +585,100 @@ namespace raisim
       if (step_counter % 5 != 0)
         return;
 
-      slope_dots.setZero(nFoot);
+      slope_dots.setZero(nFoot + 2*(num_g1-1));
       if (not isSlope) return; // all zeros when on flat
       double yaw = bodyOrientation_[2];
       double cosy = std::cos(yaw);
       double siny = std::sin(yaw);
 
-      double fx, fy, fz, bxi, byi, diff, tz;
-      bool standing = true;
+      double fx, fy, fz, bxi, byi, diff, tz, bxi_back, byi_back, tz_back, position_diff, fz_front;
+      int latest_position = 0;
+      std::vector<raisim::Vec<3>> foot_positions;
 
-      std::vector<double> foot_height, foot_x, foot_y, look_px, look_py;
-
-      for (int footIdx_i = 0; footIdx_i < nFoot; footIdx_i++)
+      // Fill up foot position vector
+      for (int footIdx_i = 0; footIdx_i < nFoot; footIdx_i++) 
       {
         raisim::Vec<3> footPosition;
         go1_->getFramePosition(footFrame_[footIdx_i], footPosition);
+	foot_positions.push_back(footPosition);
+      }
 
-        fx = footPosition[0];
-        fy = footPosition[1];
-        foot_x.push_back(fx);
-        foot_y.push_back(fy);
+      // First add front points
+      for (int k = 0; k < num_g1; k++) 
+      {
+      	for (int footIdx_i = 0; footIdx_i < 2; footIdx_i++) 
+	{
+          fx = foot_positions[footIdx_i][0];
+          fy = foot_positions[footIdx_i][1];
+	  position_diff = g1_position[k];
+
+          bxi = fx + position_diff * cosy; 
+          byi = fy + position_diff * siny; 
+
+          bxi_back = fx + (position_diff - 0.05) * cosy;
+          byi_back = fy + (position_diff - 0.05) * siny; 
+
+          tz = (hm_) ? hm_->getHeight(bxi, byi) : 0;
+          tz_back = (hm_) ? hm_->getHeight(bxi_back, byi_back) : 0;
+          diff = tz - tz_back;
+          if (abs(diff) < slope_th)
+          {
+            diff = 0;
+          }
+          slope_dots(latest_position) = diff;
+          if (isTest && visualizable_)
+          {
+            if (slope_dots(latest_position) == 0)
+              visual_scan_dots.at(latest_position)->color = {0, 1, 0, 1};
+            else
+              visual_scan_dots.at(latest_position)->color = {1, 0, 0, 1};
+            visual_scan_dots.at(latest_position)->setPosition(bxi, byi, tz);
+          }
+	  latest_position++;
+	}
+      }
+
+      // Now add the slope below the robot
+      for (int footIdx_i = 2; footIdx_i < nFoot; footIdx_i++) 
+      {
+        fx = foot_positions[footIdx_i][0];
+        fy = foot_positions[footIdx_i][1];
         fz = (hm_) ? hm_->getHeight(fx, fy) : 0;
-        foot_height.push_back(fz);
+        fz_front = (hm_) ? hm_->getHeight(foot_positions[footIdx_i-2][0],
+					  foot_positions[footIdx_i-2][1]) : 0;
 
-        // points
-        bxi = fx + lookahead_list[lookahead_idx] * cosy; //- dy * siny;
-        byi = fy + lookahead_list[lookahead_idx] * siny; //+ dy * cosy;
-        look_px.push_back(bxi);
-        look_py.push_back(byi);
-        tz = (hm_) ? hm_->getHeight(bxi, byi) : 0;
-
-        if (footIdx_i < 2)
-        {
-          diff = tz - fz;
-        }
-        else
-        {
-          diff = fz - foot_height[footIdx_i - 2];
-        }
-        // clipping
-        // std::cout << "Diff is " << diff << std::endl;
+        diff = fz - fz_front;
         if (abs(diff) < slope_th)
         {
           diff = 0;
         }
-        else
-        {
-          standing = false;
-        }
-        slope_dots(footIdx_i) = diff;
+        slope_dots(latest_position) = diff;
         if (isTest && visualizable_)
         {
-          if (slope_dots(footIdx_i) == 0)
-            visual_scan_dots.at(footIdx_i)->color = {0, 1, 0, 1};
+          if (slope_dots(latest_position) == 0)
+            visual_scan_dots.at(latest_position)->color = {0, 1, 0, 1};
           else
-            visual_scan_dots.at(footIdx_i)->color = {1, 0, 0, 1};
-          visual_scan_dots.at(footIdx_i)->setPosition(bxi, byi, tz);
+            visual_scan_dots.at(latest_position)->color = {1, 0, 0, 1};
+          visual_scan_dots.at(latest_position)->setPosition(fx, fy, fz);
         }
+	latest_position++;
       }
     }
 
     void reset(bool resample) final
     {
-      // std::cout << "It number is " << itr_number << std::endl;
-      if (isTest || isEval)
+      if (isTest)
         resample = true;
       int change_terrain_freq = 100;
       if (itr_number > start_itr_stairs)
         change_terrain_freq = 50;
-      if (itr_number % change_terrain_freq == 0 || isTest || isEval)
+      if (itr_number % change_terrain_freq == 0 || isTest)
       {
         if (hm_)
-        { // big change here, maybe revert
+        {
           world_->removeObject(hm_);
           int rand_terrain_select = 0;
-          if (itr_number > start_itr_stairs || isTest || isEval)
+          if (itr_number > start_itr_stairs || isTest)
           {
             rand_terrain_select = std::rand() % 100; // 2 + 1; // either step or terrains
           }
@@ -805,10 +688,6 @@ namespace raisim
       }
 
       randomize_sim_params();
-
-
-      // whether to use or not future points
-      ignore_future = false; // Eigen::VectorXd::Random(1)[0] > 0;
 
       avgXYVel.setZero();
       avgYawVel = 0;
@@ -824,24 +703,17 @@ namespace raisim
 
       go1_->setState(gc_init_, gv_init_);
 
-      if (isSlope and randomize_yaw)
-      {
-        double yaw = 0.5 * Eigen::VectorXd::Random(1)[0];
-        Eigen::Vector3d eulerVec = {0.0, 0.0, yaw};
-        Eigen::Matrix3d rot;
-        eulerToRot(eulerVec, rot);
-        go1_->setBaseOrientation_e(rot);
-      }
-
       obs_history.clear();
       act_history.clear();
       jterr_history.clear();
-      head_vel_history.clear();
 
       // get to rest pos
       pTarget_.tail(nJoints_) = Eigen::VectorXd::Zero(12) + actionMean_;
 
       go1_->setPdTarget(pTarget_, vTarget_);
+
+      // Reset Slope Dots
+      slope_dots.setZero(nFoot + 2*(num_g1-1));
 
       for (int i = 0; i < 50; i++)
       {
@@ -856,28 +728,23 @@ namespace raisim
         act_history.push_back(Eigen::VectorXd::Zero(12));
       for (int j = 0; j < 50; j++)
         jterr_history.push_back(Eigen::VectorXd::Zero(12));
-      for (int j = 0; j < 50; j++)
-        head_vel_history.push_back(Eigen::VectorXd::Zero(3));
-      for (int j = 0; j < 100; j++)
-        updateObservation();
       updateObservation();
       updateObservation();
       updateObservation();
 
       sample_residual_goal_steps = std::rand() % 50;
       sample_residual_env_steps = std::rand() % 10;
-      // Update lookahead and stairs
+
     }
 
     void curriculumUpdate()
     {
-      cost_coeff = 1.0; // pow(cost_coeff, cost_decay_fac); no decay in dagger
-      // itr_number += 1; Do not increase complexity in dagger
+      cost_coeff = pow(cost_coeff, cost_decay_fac);
+      itr_number += 1;
     }
 
     void setSeed(int seed)
     {
-      // seed_ = seed;
       std::srand(seed);
       for (int i = 0; i < 10; i++)
         clean_randomizer = Eigen::VectorXd::Random(1)[0];
@@ -885,7 +752,6 @@ namespace raisim
 
     void applyExternalForceRandomly()
     {
-      // Vec<3> extForce = 150 * Eigen::VectorXd::Random(3);
       if (step_counter >= 200 && step_counter % 100 == 0)
       {
         Vec<3> extForce = 500 * Eigen::VectorXd::Random(3);
@@ -894,7 +760,6 @@ namespace raisim
           auto fi = extForce[i];
           extForce[i] = fi + (2.0 * (double)(fi > 0) - 1.0) * 400.0;
         }
-        // std::cout << extForce[0] << "," <<extForce[1] << std::endl;
         extForce[2] = 0.0;
         go1_->setExternalForce(base_idx, extForce);
       }
@@ -921,11 +786,13 @@ namespace raisim
         return min_val;
     }
 
-
     double compute_forward_reward()
     {
       double r = 0.;
-      double forward_r = adaptiveForwardVelRewardCoeff_ * (-std::abs(max_speed + bodyLinearVel_[0]) + std::abs(max_speed));
+      double forward_r = adaptiveForwardVelRewardCoeff_ * std::max(max_speed, -bodyLinearVel_[0]);
+      // Do not go too fast, but track!
+      if (isDown && bodyLinearVel_[0] > (max_speed+0.1))
+      	forward_r -= adaptiveForwardVelRewardCoeff_ * (bodyLinearVel_[0] - max_speed);
       double angular_r = adaptiveAngularVelRewardCoeff_ * (-std::abs(ang_speed - bodyAngularVel_[2]) + std::abs(ang_speed));
       r += forward_r;
       r += -abs(bodyLinearVel_[1]);
@@ -966,6 +833,8 @@ namespace raisim
           server_->unlockVisualizationServerMutex();
       }
 
+      // measuring the joint error of the action I took most recently,
+      // and the most recently mesured joint angles
       auto jterr = act_history[act_history.size() - 1] - (gc_.tail(12) - actionMean_).cwiseProduct(invActionStd_);
       jterr_history.push_back(jterr);
 
@@ -1006,7 +875,6 @@ namespace raisim
               grf[footIdx_i] += impulse_i;
               grf_bin[footIdx_i] = 1.0;
               swing_bin[footIdx_i] = 0.0;
-              // net_impulse += impulse_i;
             }
           }
         }
@@ -1058,6 +926,9 @@ namespace raisim
       sidewaysReward_ = (pow(action[0], 2) + pow(action[3], 2) + pow(action[6], 2) + pow(action[9], 2));
       jointSpeedReward_ = go1_->getGeneralizedVelocity().e().tail(nJoints_).squaredNorm();
       footSlipReward_ = (foot_vel.transpose() * grf_bin).sum();
+      if (isDown)
+	footSlipReward_ *= 4.;
+      //std::cout << "Slip reward " << footSlipReward_ << std::endl;
       footClearenceReward_ = (swing_bin.transpose() * foot_pos_err).sum();
       contactChangeReward_ = contact_changes;
       upwardReward_ = bodyOrientation_.head(2).squaredNorm();
@@ -1104,11 +975,11 @@ namespace raisim
       quat[1] = gc_[4];
       quat[2] = gc_[5];
       quat[3] = gc_[6];
-      // Eigen::Quaternionf e_quat(quat[0], quat[1], quat[2], quat[3]);//(quat);
       raisim::quatToRotMat(quat, rot);
       bodyLinearVel_ = rot.e().transpose() * gv_.segment(0, 3);
       bodyAngularVel_ = rot.e().transpose() * gv_.segment(3, 3);
 
+      // Low pass on speed
       if (step_counter <= 1)
       {
         avgXYVel = bodyLinearVel_.segment(0, 2);
@@ -1129,7 +1000,10 @@ namespace raisim
       if (use_slope_dots)
         compute_slope_info();
 
-      obDouble_ << bodyOrientation_.head(2),
+
+      // Fixed control policy
+
+      obDouble_.head(obDim_/2) << bodyOrientation_.head(2),
           gc_.tail(12), /// joint angles
           gv_.tail(12),
           act_history[act_history.size() - 1],
@@ -1140,22 +1014,30 @@ namespace raisim
           friction,
           avgXYVel, avgYawVel,
           slope_dots,
-          isSlope;
+          1.-(double)useRef;
+
+      // Control Policy
+
+      obDouble_.tail(obDim_/2) << bodyOrientation_.head(2),
+          gc_.tail(12), /// joint angles
+          gv_.tail(12),
+          act_history[act_history.size() - 1],
+          speed_vec,
+          (double)includeGRF * grf_bin_obs,
+          mass_params,
+	  motor_strength,
+          friction,
+          avgXYVel, avgYawVel,
+          slope_dots,
+          1.- (double)useRef;
 
       obs_history.push_back(obDouble_);
     }
 
     void observe(Eigen::Ref<EigenVec> ob) final
     {
-      int lag = 1;
-      int vec_size = obs_history.size();
-      ob_delay << obs_history[vec_size - lag]; //, obs_history[obs_history.size() - 2], obs_history[obs_history.size() - 3];
-      for (int i = 0; i < history_len; i++)
-      {
-        ob_concat.segment(baseDim * i, baseDim) << obs_history[vec_size - lag - history_len + i].head(baseDim);
-      }
-      ob_concat.tail(base_obDim_) << ob_delay;
-      ob = ob_concat.cast<float>();
+      ob_delay << obs_history[obs_history.size() - 1]; //, obs_history[obs_history.size() - 2], obs_history[obs_history.size() - 3];
+      ob = ob_delay.cast<float>();
     }
 
     bool isTerminalState(float &terminalReward) final
@@ -1168,7 +1050,6 @@ namespace raisim
         for (auto &contact : go1_->getContacts())
           if (footIndices_.find(contact.getlocalBodyIndex()) == footIndices_.end())
           {
-            // std::cout << "Terminating for contact " << std::endl;
             return true;
           }
       }
@@ -1178,7 +1059,6 @@ namespace raisim
         term_pitch = 0.8;
       if (abs(bodyOrientation_[0]) > 0.6 || abs(bodyOrientation_[1]) > term_pitch)
       {
-        //std::cout << "Terminating for pitch " << std::endl;
         return true;
       }
 
@@ -1190,23 +1070,19 @@ namespace raisim
         term_height = 0.1;
       if ((gc_[2] - z_ht) < term_height)
       {
-        //std::cout << "Terminating for height " << std::endl;
         return true;
       }
 
-      if (isSlope)
+      if (not sampleCmds && not isEval)
       {
         double yaw = bodyOrientation_[2];
-        if (abs(yaw) > 0.8) {
-          //std::cout << "Terminating for yaw " << std::endl;
+        if (abs(yaw) > 0.5) {
           return true;
         }
       }
 
       terminalReward = 0.f;
       int max_steps = 1200;
-      if (isSlope)
-        max_steps = 1200;
 
       if (step_counter > max_steps)
         return true;
@@ -1284,22 +1160,24 @@ namespace raisim
     double terrain_freq = 0;
     double canonical_step_height = 0.1; // starting point
     bool isSlope = false;
-    bool quantizeVel = false;
+    bool sampleCmds = false;
+    bool useRef = false;
+    bool isDown = false;
     raisim::HeightMap *hm_ = nullptr;
     std::vector<int> link_ids;
     std::vector<double> base_mass_list;
-    std::vector<double> step_height_list = {0.1, 0.13, 0.15, 0.17, 0.19, 0.21};
-    int max_height_idx = (int) step_height_list.size();
-    int start_itr_stairs = 1000;
+    std::vector<double> step_height_list = {0.1, 0.13, 0.15, 0.17, 0.19, 0.21, 0.23};
+    int start_itr_stairs = 1200;
     std::deque<Eigen::VectorXd> obs_history;
     std::deque<Eigen::VectorXd> act_history;
     std::deque<Eigen::VectorXd> jterr_history;
-    std::deque<Eigen::VectorXd> head_vel_history;
-    bool isTest;
-    std::vector<double> lookahead_list = {0.05};
+    bool isTest,isEval;
+
+    // use 0.05 for a blind policy, 0.15 for a vision policy. This control the distance in lookahead
+    std::vector<double> g1_position = {0.05}; //, 0.15
+    std::vector<double> step_length_list = {0.6, 0.5, 0.4, 0.3, 0.35, 0.28, 0.45, 0.25};
     int lookahead_idx = 0;
-    std::vector<double> step_length_list = {0.6, 0.5, 0.4, 0.3};
-    int max_step_idx = (int)step_length_list.size();
+    int max_step_idx = 1;
 
     bool randomize_friction;
     bool randomize_mass;
@@ -1310,12 +1188,14 @@ namespace raisim
     bool use_slope_dots = false;
 
     bool cts_target_speed;
+    bool observe_base_speed;
     double target_speed;
     double target_speed_period;
     double target_end_speed;
     double target_start_speed;
     bool speedTest;
     bool target_speed_curriculum;
+    int num_g1;
 
     int baseDim, geomDim;
     Eigen::Vector2d avgXYVel;
@@ -1327,32 +1207,23 @@ namespace raisim
     double forwardRewardZ = 0;
     double forwardReward;
     double pid_coeff = 55;
-    double slope_th = 0.5;
+    double slope_th = 0.15;
 
     double current_torque_squareNorm;
 
-    int env_id_, n_futures;
+    int env_id_;
     double clean_randomizer;
-
-    bool isEval;
 
     int sample_residual_goal_steps;
     int sample_residual_env_steps;
-    bool randomize_yaw = false;
 
-    int base_obDim_;
-    Eigen::VectorXd ob_concat;
-    int history_len;
-
+    // double stop_bit;
     double adaptiveAngularVelRewardCoeff_ = 0.;
     double adaptiveForwardVelRewardCoeff_ = 0.;
-    double adaptiveActionRewardCoeff_ = 0.;
-    double adaptiveSidewaysRewardCoeff_ = 0.;
     double walked_dist_ = 0.;
-    bool ignore_future = true;
+    double alive_bonus = 0.;
 
     double sample_goal_rand_num = 0.0;
-    double alive_bonus = 0.0;
 
     size_t head_idx;
     raisim::Vec<3> gc_headVelocity, gc_headAngularVelocity;

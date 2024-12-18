@@ -262,6 +262,16 @@ namespace raisim
       ob = ob_concat.cast<float>();
     }
 
+    void getDis(Eigen::Ref<EigenVec> dis)
+    {
+      return;
+    }
+
+    void getRewardInfo(Eigen::Ref<EigenVec> reward)
+    {
+      return;
+    }
+
     bool isTerminalState(float &terminalReward) final {
       return false;
     }
