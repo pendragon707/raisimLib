@@ -125,8 +125,11 @@ namespace raisim
       READ_YAML(double, ang_speed, cfg["ang_speed"])
       READ_YAML(double, terrain_freq, cfg["terrainFreq"])
 
-      go1_ = world_->addArticulatedSystem(resourceDir_ + "/go1/urdf/go1.urdf");
-      go1_->setName("go1");
+      // go1_ = world_->addArticulatedSystem(resourceDir_ + "/go1/urdf/go1.urdf");
+      // go1_->setName("go1");
+
+      go1_ = world_->addArticulatedSystem(resourceDir_ + "/aliengo/aliengo.urdf");
+      go1_->setName("aliengo");
       go1_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
 
       /// indices of links that should not make contact with ground

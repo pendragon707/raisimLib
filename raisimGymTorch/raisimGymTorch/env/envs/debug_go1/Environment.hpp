@@ -67,8 +67,10 @@ namespace raisim
       /// Target Speed
       READ_YAML(double, pid_coeff, cfg["pid_coeff"])
 
-      go1_ = world_->addArticulatedSystem(resourceDir_ + "/go1/urdf/go1.urdf");
-      go1_->setName("go1");
+      // go1_ = world_->addArticulatedSystem(resourceDir_ + "/go1/urdf/go1.urdf");
+      // go1_->setName("go1");
+      go1_ = world_->addArticulatedSystem(resourceDir_ + "/aliengo/aliengo.urdf");
+      go1_->setName("aliengo");
       go1_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
 
       nFoot = 4;
