@@ -19,7 +19,8 @@ class RaisimGymVecEnv:
         self._observation = np.zeros([self.num_envs, self.num_obs], dtype=np.float32)
         self.obs_rms = RunningMeanStd(shape=[self.num_envs, self.num_obs])
         self._reward = np.zeros(self.num_envs, dtype=np.float32)
-        self._done = np.zeros(self.num_envs, dtype=np.bool)
+        # self._done = np.zeros(self.num_envs, dtype=np.bool)
+        self._done = np.zeros(self.num_envs, dtype=bool)
         self.rewards = [[] for _ in range(self.num_envs)]
         self.displacements = np.zeros([self.num_envs, 4], dtype=np.float32)
         self.reward_info = np.zeros([self.num_envs, 16], dtype=np.float32)
@@ -46,7 +47,9 @@ class RaisimGymVecEnv:
         self.wrapper.step(action, self._reward, self._done)
         return self._reward.copy(), self._done.copy()
 
-    def load_scaling(self, dir_name, iteration, policy_type=None, num_g1=None):
+    def load_scaling(self, dir_name, iteration, policy_type=None, num_g1=None, clip = False):
+        # num_g1 = n_futures = 1
+
         # policy_tupe 0 is the flat
         # policy type 1 is the combines
         # policy type 2 is the blind policy, from which we load encoders
@@ -54,6 +57,15 @@ class RaisimGymVecEnv:
         var_file_name = dir_name + "/var" + str(iteration) + ".csv"
         loaded_mean = np.loadtxt(mean_file_name, dtype=np.float32)
         loaded_var = np.loadtxt(var_file_name, dtype=np.float32)
+
+        print( "loaded_mean ", loaded_mean.shape )
+
+        if clip:
+            loaded_mean = np.expand_dims( loaded_mean[1,:], axis=0 )
+            loaded_var = np.expand_dims( loaded_var[1,:], axis=0 )
+
+        print( "loaded_mean ", loaded_mean.shape )
+
         #if policy_type == 0: (for cvpr)
         #    #self.obs_rms.mean[:,:loaded_mean.shape[1]] = loaded_mean
         #    #self.obs_rms.var[:,:loaded_var.shape[1]] = loaded_var
