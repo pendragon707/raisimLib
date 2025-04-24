@@ -71,6 +71,8 @@ To start training, you can use the following commands:
 ```
 cd raisimLib/raisimGymTorch/raisimGymTorch/env/envs/rsg_go1_task
 python runner.py --name random --gpu 1 --exptid 1
+
+python runner.py --name random --debug --exptid 1
 ```
 It will take approximately 4K iterations to train a good enough policy. If you want to make any changes to the training environment, feel free to edit [this file](./raisimGymTorch/env/envs/rsg_go1_task/Environment.hpp). Note that every time you make changes, you need to recompile the file by running this commands:
 
@@ -86,6 +88,13 @@ cd raisimLib/raisimGymTorch/raisimGymTorch/env/envs/rsg_go1_task
 python runner.py --name random --gpu 1 --exptid 1 --loadid ITR_NBR --overwrite
 ```
 
+Third phase:
+```
+cd raisimLib/raisimGymTorch/raisimGymTorch/env/envs/third_phase
+
+python runner.py --name random --debug --exptid 2 --loadpth ../../../../data/rsg_go1_task/model_05_03/ --loadid 14000 --enc_loadpth ../../../../data/dagger_ckpt/model_05_03/ --enc_loadid 1200 --overwrite
+```
+
 ### Visualizing a policy
 
 You can use the following code to see if your policy training worked. First run the unity renderer:
@@ -93,7 +102,7 @@ You can use the following code to see if your policy training worked. First run 
 ```
 cd raisimLib/raisimUnity/linux
 ./raisimUnity.x86_64
-```
+``` 
 
 In a separate terminal, run the policy
 ```

@@ -1,3 +1,4 @@
+from collections import deque
 from statistics import geometric_mean
 from ruamel.yaml import YAML, dump, RoundTripDumper
 from raisimGymTorch.env.bin import rsg_go1_task
@@ -6,11 +7,8 @@ from raisimGymTorch.helper.raisim_gym_helper import ConfigurationSaver
 import os
 import math
 import time
-
 import raisimGymTorch.algo.ppo.module as ppo_module
 import raisimGymTorch.algo.ppo.ppo as PPO
-from raisimGymTorch.algo.ppo.dagger import DaggerAgent, DaggerExpert
-
 import torch.nn as nn
 import numpy as np
 import torch
@@ -22,15 +20,29 @@ import argparse
 #     wandb = None
 wandb = None
 
+def push_history(deq, e):
+    if len(deq) == deq.maxlen:
+        deq.popleft()
+    deq.append(e)
+
+def normalize_observation(obs, loaded_mean, loaded_var, clip_obs):
+    return np.clip(
+        (obs - loaded_mean) / np.sqrt(loaded_var + 1e-8),
+        -clip_obs,
+        clip_obs
+    )
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--exptid", type = int, help='experiment id to prepend to the run')
 parser.add_argument("--overwrite", action = 'store_true')
 parser.add_argument("--debug", action = 'store_true')
-parser.add_argument("--loadid", type = int, default = None)
-parser.add_argument("--loadpth", type = str, default = None)
 parser.add_argument("--gpu", type = int, default = 1)
 parser.add_argument("--name", type = str)
-parser.add_argument("--ext_act", type = str, default='leakyRelu')
+
+parser.add_argument("--loadpth", type = str, default = None)
+parser.add_argument("--loadid", type = int, default = None)
+parser.add_argument("--enc_loadpth", type = str, default = None)
+parser.add_argument("--enc_loadid", type = int, default = None)
 args = parser.parse_args()
 
 # directories
@@ -49,11 +61,13 @@ output_activation_fn = activation_fn_map[cfg['architecture']['activation']]
 small_init_flag = cfg['architecture']['small_init']
 
 if args.debug:
-    # cfg['environment']['num_envs'] = 1
-    # cfg['environment']['num_threads'] = 1
+    cfg['environment']['num_envs'] = 1
+    cfg['environment']['num_threads'] = 1
     device_type = 'cpu'
+    clip = True
 else:
     device_type = 'cuda:{}'.format(args.gpu)
+    clip = False
 
 cfg['environment']['test'] = False
 cfg['environment']['speedTest'] = False
@@ -83,11 +97,11 @@ if use_fourier:
     fourier_value = cfg['environment']['fourier_value']
 
 # save the configuration and other files
-saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/third/" + '{:04d}'.format(args.exptid),
-                           save_items=[task_path + "/Environment.hpp", task_path + "/train.py"], config = cfg, overwrite = args.overwrite)
+saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/dagger_ckpt/" + '{:04d}'.format(args.exptid),
+                           save_items=[task_path + "/Environment.hpp", task_path + "/runner.py"], config = cfg, overwrite = args.overwrite)
 if wandb:
     wandb.init(project='command_loco', config=dict(cfg), name=args.name)
-    wandb.save(home_path + '/raisimGymTorch/env/envs/third/Environment.hpp')
+    wandb.save(home_path + '/raisimGymTorch/env/envs/dagger_ckpt/Environment.hpp')
 
 # Training
 n_steps = math.floor(cfg['environment']['max_time'] / cfg['environment']['control_dt'])
@@ -102,6 +116,18 @@ layer_type = cfg['architecture']['layer_type']
 freeze_encoder = cfg['architecture']['freeze_encoder']
 
 avg_rewards = []
+
+# prop_enc_pth = Path(os.getcwd()) / 'models/model_16k_dagger_1200/prop_encoder_1200.pt'
+prop_enc_pth = os.path.join(args.enc_loadpth, f"prop_encoder_{args.enc_loadid}.pt")
+mlp_pth = os.path.join(args.enc_loadpth, f"mlp_{args.enc_loadid}.pt")
+mean_file = os.path.join(args.enc_loadpth, f"mean{args.enc_loadid}.csv")
+var_file = os.path.join(args.enc_loadpth, f"var{args.enc_loadid}.csv")
+
+prop_loaded_encoder = torch.jit.load(prop_enc_pth).to(device_type)
+loaded_mlp = torch.jit.load(mlp_pth).to(device_type)
+loaded_mean = np.loadtxt(mean_file, dtype=np.float32)[0]
+loaded_var = np.loadtxt(var_file, dtype=np.float32)[0]
+clip_obs = 10
 
 if use_fourier:
     raise Exception('not implemented')
@@ -118,7 +144,9 @@ else:
                                      small_init_flag,
                                      base_obdim = baseDim,
                                      geom_dim = geomDim,
-                                     n_futures = n_futures),
+                                     n_futures = n_futures,
+                                     dagger_prop_encoder = prop_loaded_encoder,
+                                     dagger_action_mlp = loaded_mlp),
                                      ppo_module.MultivariateGaussianDiagonalCovariance(act_dim, init_var),
                                      device_type)
 
@@ -128,7 +156,9 @@ else:
                                                     1,
                                                     base_obdim = baseDim,
                                                     geom_dim = geomDim,
-                                                    n_futures = n_futures),
+                                                    n_futures = n_futures,
+                                                    dagger_prop_encoder = prop_loaded_encoder,
+                                                    dagger_action_mlp = loaded_mlp),
                                     device_type)
         else:
             raise NotImplementedError()
@@ -136,74 +166,21 @@ else:
     else:
         raise NotImplementedError()
 
-# Steps + flat policy
-# flat_policy_load_path = os.path.join(task_path,"../../../../data/base_policy/policy_22000.pt")
-# env.load_scaling(os.path.join(task_path, "../../../../data/base_policy"),
-#                  22000, policy_type=0, num_g1=n_futures)
+# flat_policy_load_path = os.path.join(task_path,"../../../../data/run_policy/policy_14000.pt")
+# env.load_scaling(os.path.join(task_path, "../../../../data/run_policy"),
+#                  12000, policy_type=0, num_g1=n_futures, clip=clip)
 # loaded_graph_flat = torch.jit.load(flat_policy_load_path, map_location=torch.device(device_type))
 # flat_expert = ppo_module.Steps_Expert(loaded_graph_flat, device=device_type, baseDim=42,
 #                                       geomDim=2, n_futures=1, num_g1=n_futures)
 
-# prop_enc_pth = '../../../../data/'+ saver.data_dir + +'/prop_encoder_0.pt' # !!!!
-# prop_loaded_encoder = torch.jit.load(prop_enc_pth).to(device_type)
-
-dagger_t_steps = cfg['environment']['history_len']
-dagger_base_dims = cfg['environment']['baseDim']
-
-dagger_activation_fn_map = {'none': None, 'tanh': nn.Tanh, 'leakyRelu': nn.LeakyReLU}
-dagger_output_activation_fn = dagger_activation_fn_map[cfg['architecture']['activation']]
-dagger_small_init_flag = cfg['architecture']['small_init']
-dagger_ext_activation_map = dagger_activation_fn_map[args.ext_act]
-
-print( "ob_dim ", ob_dim )
-print( "dagger_t_steps ", dagger_t_steps )
-print( "dagger_base_dims ", dagger_base_dims )
-
-
-
-
-expert_policy = DaggerExpert(args.loadpth, str(args.loadid), 
-                            #  total_obs_size = ob_dim, 
-                             total_obs_size = 2170, 
-                             T = dagger_t_steps,
-                             base_obs_size = dagger_base_dims,
-                            #  nenvs = env.obs_rms.mean.shape[0],
-                             nenvs = 1,
-                             geomDim=int(cfg['environment']['geomDim']),
-                             n_futures=n_futures,
-                             device = device_type)
-
-prop_latent_dim = 8
-geom_latent_dim = 1
-
-student_mlp = ppo_module.MLP(cfg['architecture']['policy_net'], # ?
-                                        dagger_ext_activation_map,
-                                        dagger_base_dims + prop_latent_dim + (n_futures+1)*geom_latent_dim,
-                                        act_dim,
-                                        dagger_output_activation_fn, 
-                                        dagger_small_init_flag)
-prop_latent_encoder = ppo_module.StateHistoryEncoder(dagger_ext_activation_map, dagger_base_dims, dagger_t_steps,
-                                                     prop_latent_dim + (n_futures+1)*geom_latent_dim)
-
-flat_expert = DaggerAgent(expert_policy,
-                          prop_latent_encoder,
-                          student_mlp, dagger_t_steps, dagger_base_dims, device_type, n_futures=n_futures)
-
-student_mlp_path = '../../../../data/dagger_ckpt/0001/mlp_0.pt' # !!!!
-prop_latent_encoder_path = '../../../../data/dagger_ckpt/0001/prop_encoder_0.pt' # !!!!
-flat_expert.load_trained(student_mlp_path, prop_latent_encoder_path)
-
-
-
-# Encoders loading from blind stairs policy
-checkpoint = torch.load(os.path.join(task_path,"../../../../data/base_policy/full_22000.pt"), map_location=torch.device(device_type))
+checkpoint = torch.load(os.path.join(task_path,"../../../../data/run_policy/full_14000.pt"), map_location=device_type)
+# checkpoint = torch.jit.load(os.path.join(task_path,"../../../../data/run_policy/full_14000.pt")).to(device_type)
 blind_policy_state_dict = checkpoint['actor_architecture_state_dict']
 own_state = actor.architecture.state_dict()
 for name, param in blind_policy_state_dict.items():
     own_state[name].copy_(param)
-env.load_scaling(os.path.join(task_path, "../../../../data/base_policy"),
-                 22000, policy_type=2, num_g1=n_futures)
-
+env.load_scaling(os.path.join(task_path, "../../../../data/run_policy"),
+                 12000, policy_type=2, num_g1=n_futures, clip=clip)
 
 ppo = PPO.PPO(actor=actor,
               critic=critic,
@@ -217,7 +194,7 @@ ppo = PPO.PPO(actor=actor,
               log_dir=saver.data_dir,
               mini_batch_sampling='in_order',
               learning_rate=5e-4,
-              flat_expert=flat_expert
+            #   flat_expert=flat_expert
               )
 
 if wandb:
@@ -226,16 +203,24 @@ if wandb:
 
 penalty_scale = np.array([cfg['environment']['lateralVelRewardCoeff'], cfg['environment']['angularVelRewardCoeff'], cfg['environment']['deltaTorqueRewardCoeff'], cfg['environment']['actionRewardCoeff'], cfg['environment']['sidewaysRewardCoeff'], cfg['environment']['jointSpeedRewardCoeff'], cfg['environment']['deltaContactRewardCoeff'], cfg['environment']['deltaReleaseRewardCoeff'], cfg['environment']['footSlipRewardCoeff'], cfg['environment']['upwardRewardCoeff'], cfg['environment']['workRewardCoeff'], cfg['environment']['yAccRewardCoeff'], 1., 1., 1.])
 
-# if args.loadid is not None:
-#     checkpoint = torch.load(saver.data_dir+"/full_"+str(args.loadid)+'.pt')
-#     actor.architecture.load_state_dict(checkpoint['actor_architecture_state_dict'])
-#     actor.distribution.load_state_dict(checkpoint['actor_distribution_state_dict'])
-#     critic.architecture.load_state_dict(checkpoint['critic_architecture_state_dict'])
-#     try:
-#         ppo.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-#     except:
-#         print("Not loading ppo state")
-#     env.load_scaling(saver.data_dir, args.loadid, policy_type=1) 
+if args.loadid is not None:    
+    checkpoint = torch.load(args.loadpth+"/full_"+str(args.loadid)+'.pt', map_location=device_type)
+
+    # print(checkpoint.keys())
+    # print(checkpoint['actor_architecture_state_dict'].keys())
+    # print(checkpoint['actor_distribution_state_dict'].keys())
+    # print(checkpoint['optimizer_state_dict'].keys())
+
+    # actor.architecture.load_state_dict(checkpoint['actor_architecture_state_dict'])
+    actor.architecture.load_state_dict(checkpoint['actor_architecture_state_dict'], strict=False)
+    actor.distribution.load_state_dict(checkpoint['actor_distribution_state_dict'])
+    critic.architecture.load_state_dict(checkpoint['critic_architecture_state_dict'], strict=False)
+    try:
+        ppo.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    except:
+        print("Not loading ppo state")
+
+    env.load_scaling(args.loadpth, args.loadid, policy_type=1, clip=clip) 
 
 if freeze_encoder:
     # do not update some networks
@@ -246,8 +231,7 @@ if freeze_encoder:
             param.requires_grad = False
 
 if args.loadid is not None:
-    env.set_itr_number(args.loadid)
-
+    env.set_itr_number( int(args.loadid) )
 
 # This coefficient controls how much the policy is optimized with RL. Change to 1 for taking away demonstrations from a previous policy.
 rl_coeff = 0.3
@@ -284,13 +268,39 @@ for update in range(500001) if args.loadid is None else range(args.loadid + 1, 5
         env.save_scaling(saver.data_dir, str(update))
 
     # actual training
+    obs = env.observe(not freeze_encoder)
+    # obs = np.squeeze( obs[:,obs.shape[1]//2:112] )
+    obs = np.squeeze( obs[:,:baseDim] )
+
+    print( "actual training obs ", obs.shape, " ", type(obs) )
+    obs_history = deque([obs]*50, maxlen=51)
+    print( len(obs_history) )
+
     for step in range(n_steps):
         obs = env.observe(not freeze_encoder)
+        # obs = np.squeeze( obs[:,obs.shape[1]//2:112] )
+        obs = np.squeeze( obs[:,:baseDim] )
+        print( "actual training obs ", obs.shape, " ", type(obs) )
+        
+        push_history(obs_history, obs)
+
+        print( np.concatenate(obs_history).shape )
+        print( np.zeros(28, dtype=np.float32).shape )
+
+        obs = np.concatenate(
+            [np.concatenate(obs_history), np.zeros(28, dtype=np.float32)]
+        )
+        obs = normalize_observation(obs, loaded_mean, loaded_var, clip_obs)
+        # obs_torch = torch.from_numpy(obs).cpu().reshape(1, -1)
+        obs = np.expand_dims(obs, axis=0)
+
         action = ppo.observe(obs)
         reward, dones = env.step(action)
         unscaled_reward_info = env.get_reward_info()
         forwardX = unscaled_reward_info[:, 0]
         penalty = unscaled_reward_info[:, 1:]
+
+        print( "ppo.step ", obs.shape)
         ppo.step(value_obs=obs, rews=reward, dones=dones, infos=[])
         done_sum = done_sum + sum(dones)
         reward_ll_sum = reward_ll_sum + sum(reward)
@@ -301,10 +311,33 @@ for update in range(500001) if args.loadid is None else range(args.loadid + 1, 5
 
     # take st step to get value obs
     obs = env.observe(not freeze_encoder)
+    obs = np.squeeze( obs[:,:baseDim] )
+    print( "actual training obs ", obs.shape, " ", type(obs) )
+    
+    push_history(obs_history, obs)
+
+    print( np.concatenate(obs_history).shape )
+    print( np.zeros(28, dtype=np.float32).shape )
+
+    obs = np.concatenate(
+        [np.concatenate(obs_history), np.zeros(28, dtype=np.float32)]
+    )
+    obs = normalize_observation(obs, loaded_mean, loaded_var, clip_obs)
+    # obs_torch = torch.from_numpy(obs).cpu().reshape(1, -1)
+    obs = np.expand_dims(obs, axis=0)
+
+    print("PPO update!")
+    print( "ppo.update ", obs.shape)
+
     ppo.update(actor_obs=obs,
                value_obs=obs,
                log_this_iteration=update % 10 == 0,
                update=update)
+
+
+
+    
+    print("PPO update end!")
     
     end = time.time()
     

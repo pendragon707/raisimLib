@@ -40,6 +40,17 @@ class PPO:
         else:
             actor_obs_shape = actor.obs_shape[0]
             critic_obs_shape = critic.obs_shape[0]
+
+        # TEMP ---------------------
+        print("NONENONEONOENONE")
+        print( " actor_obs_shape ", actor_obs_shape )
+        print( " critic_obs_shape ", critic_obs_shape )
+        actor_obs_shape = 2170
+        critic_obs_shape = 2170       # 42*51 + 28
+        # --------------------------
+
+        print("num_transitions_per_env ", num_transitions_per_env)
+
         self.storage = RolloutStorage(num_envs, num_transitions_per_env, [critic_obs_shape], [actor_obs_shape], actor.action_shape, device)
         self.rl_coeff = 1
 
@@ -94,15 +105,26 @@ class PPO:
         print("Setting RL coeffs to {}".format(self.rl_coeff))
 
     def observe(self, actor_obs):
+        print( "observe ")
+        print( "actor_obs.shape ", actor_obs.shape )
+
+        # self.actor_obs = actor_obs[:,42*50:42*(50 + 1)]
         self.actor_obs = actor_obs
+        
         # the -1 is due to the addition of isSlope
         self.actions, self.actions_log_prob = self.actor.sample(torch.from_numpy(actor_obs).to(self.device))
         # self.actions = np.clip(self.actions.numpy(), self.env.action_space.low, self.env.action_space.high)
+
+        print( "actions.shape ", self.actions.shape )
+
         return self.actions.cpu().numpy()
 
     def step(self, value_obs, rews, dones, infos):
+        print("step PPO")
         value_obs = value_obs
         values = self.critic.predict(torch.from_numpy(value_obs).to(self.device))
+        # values = self.critic.predict(torch.from_numpy(value_obs).to(self.device))[:, 0]
+        print("values ", values.shape )
         self.storage.add_transitions(self.actor_obs, value_obs, self.actions, rews, dones, values,
                                      self.actions_log_prob)
 

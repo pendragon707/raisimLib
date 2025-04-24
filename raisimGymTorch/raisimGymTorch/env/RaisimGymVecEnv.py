@@ -47,7 +47,7 @@ class RaisimGymVecEnv:
         self.wrapper.step(action, self._reward, self._done)
         return self._reward.copy(), self._done.copy()
 
-    def load_scaling(self, dir_name, iteration, policy_type=None, num_g1=None, clip = False):
+    def load_scaling(self, dir_name, iteration, policy_type=None, num_g1=None, clip = False, expand = False):
         # num_g1 = n_futures = 1
 
         # policy_tupe 0 is the flat
@@ -60,9 +60,13 @@ class RaisimGymVecEnv:
 
         print( "loaded_mean ", loaded_mean.shape )
 
-        if clip:
+        if clip:            
             loaded_mean = np.expand_dims( loaded_mean[1,:], axis=0 )
             loaded_var = np.expand_dims( loaded_var[1,:], axis=0 )
+
+        if expand:
+            loaded_mean = np.expand_dims( loaded_mean, axis=0 )
+            loaded_var = np.expand_dims( loaded_var, axis=0 )
 
         print( "loaded_mean ", loaded_mean.shape )
 

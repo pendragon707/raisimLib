@@ -11,10 +11,10 @@ import torch.nn as nn
 import numpy as np
 import torch
 import argparse
-try:
-    import wandb
-except:
-    wandb = None
+# try:
+#     import wandb
+# except:
+#     wandb = None
 
 wandb = None
 
