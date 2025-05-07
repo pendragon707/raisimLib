@@ -15,9 +15,11 @@ environment:
   max_time: 6.0
   pid_coeff: 45.0
   slope_threshold: 0.08
-  forwardVelRewardCoeff: 60
+  # forwardVelRewardCoeff: 60
+  forwardVelRewardCoeff: 35
   lateralVelRewardCoeff: 20
-  angularVelRewardCoeff: 35
+  # angularVelRewardCoeff: 35
+  angularVelRewardCoeff: 60
   torqueRewardCoeff: 0.0
   deltaTorqueRewardCoeff: -0.0
   actionRewardCoeff: -0.05
