@@ -729,7 +729,8 @@ namespace raisim
       }
 
       max_speed = 0.5 + delta_max_speed;
-      ang_speed = 0.0 + delta_ang_speed;
+      // ang_speed = 0.0 + delta_ang_speed;
+      ang_speed = 0.3 + delta_ang_speed;
 
 
       speed_vec.setZero();
@@ -1028,29 +1029,12 @@ namespace raisim
       current_foot_state = last_foot_state;
       for (int footIdx_i = 0; footIdx_i < nFoot; footIdx_i++)
       {
-
-        // std::cout << "grf " << grf << std::endl;
-//        std::cout << "grf_bin " << grf_bin << std::endl;
-        // std::cout << "swing_bin " << swing_bin << std::endl;
-        // std::cout << "foot_vel " << foot_vel << std::endl;
-        // std::cout << "foot_pos_ht " << foot_pos_ht << std::endl;
-        // std::cout << "foot_pos_bin " << foot_pos_bin << std::endl;
-        // std::cout << "foot_pos_err " << foot_pos_err << std::endl;
-        // std::cout << "current_foot_state " << current_foot_state << std::endl;
-
         auto footIndex = footVec_[footIdx_i];
         // check for contact event
         for (auto &contact : go1_->getContacts())
-        {          
+        {
           if (contact.skip())
             continue;
-
-          // std::cout << "contact " << contact << std::endl;
-          // std::cout << "footIndex " << footIndex << std::endl;
-          // std::cout << "contact index " << contact.getlocalBodyIndex() << std::endl;
-          // std::cout << "contact frame " << contact.getContactFrame() << std::endl;
-          // std::cout << "contact impulse " << contact.getImpulse() << std::endl;
-
           if (footIndex == contact.getlocalBodyIndex())
           {
             auto impulse_i = (contact.getContactFrame().e() * contact.getImpulse()->e()).norm();
@@ -1115,42 +1099,9 @@ namespace raisim
       //std::cout << "Slip reward " << footSlipReward_ << std::endl;
       footClearenceReward_ = (swing_bin.transpose() * foot_pos_err).sum();
       contactChangeReward_ = contact_changes;
-//      upwardReward_ = bodyOrientation_.head(2).squaredNorm(); // ? 
+      upwardReward_ = bodyOrientation_.head(2).squaredNorm();
       workReward_ = (go1_->getGeneralizedVelocity().e().tail(nJoints_).transpose() * current_torque.e().tail(nJoints_)).sum();
       yAccReward_ = pow(bodyLinearVel_[2], 2);
-
-
-      twoLegsReward = 0;
-      if (grf_bin[2] != 1)
-        {
-          // twoLegsReward += forwardReward*0.2;
-          twoLegsReward += 40;
-        }
-      else
-        {
-          // twoLegsReward -= forwardReward*0.5;
-          twoLegsReward -= 40;
-        }
-
-      if (grf_bin[3] != 1) 
-        {
-          // twoLegsReward += forwardReward*0.2;
-          twoLegsReward += 40;
-        }
-      else
-        {
-          // twoLegsReward -= forwardReward*0.5;
-          twoLegsReward -= 40;
-        }
-
-      goal_pitch = 1;
-      goal_roll = 0;
-      sigma = 0.75;
-      // orientationError = pow(goal_pitch - abs(bodyOrientation_[1]), 2) + pow(goal_roll - abs(bodyOrientation_[0]), 2);
-      orientationError = pow(goal_pitch - abs(bodyOrientation_[1]), 2);
-      orientationReward = std::exp( -orientationError/sigma );
-      costOrientation = 100.0;
-
 
       // update histories
       last_torque = VecDyn(go1_->getGeneralizedForce());
@@ -1158,40 +1109,15 @@ namespace raisim
       last_swing = swing_bin;
       last_foot_state = current_foot_state;
 
-    //   std::cout << "forwardReward " << forwardReward << std::endl;
-    //   std::cout << "deltaContactReward_ " << deltaContactReward_ << std::endl;
-    //   std::cout << "deltaReleaseReward_ " << deltaReleaseReward_ << std::endl;
-    //   std::cout << "contactReward_ " << contactReward_ << std::endl;
-    //   std::cout << "contactDistReward_ " << contactDistReward_ << std::endl;
-    //   std::cout << "torqueReward_ " << torqueReward_ << std::endl;
-    //   std::cout << "deltaTorqueReward_ " << deltaTorqueReward_ << std::endl;
-    //   std::cout << "actionReward_ " << actionReward_ << std::endl;
-    //   std::cout << "sidewaysReward_ " << sidewaysReward_ << std::endl;
-    //   std::cout << "jointSpeedReward_ " << jointSpeedReward_ << std::endl;
-    //   std::cout << "footSlipReward_ " << footSlipReward_ << std::endl;
-    //   std::cout << "footClearenceReward_ " << footClearenceReward_ << std::endl;
-    //   std::cout << "contactChangeReward_ " << contactChangeReward_ << std::endl;
-    //   std::cout << "upwardReward_ " << upwardReward_ << std::endl;
-    //   std::cout << "workReward_ " << workReward_ << std::endl;
-    //   std::cout << "yAccReward_ " << yAccReward_ << std::endl;
-
-    //  std::cout << "twoLegsReward" << twoLegsReward << std::endl;
-    //  std::cout << "orientationReward" << orientationReward << std::endl;
-
-      // cost_coeff = 1
       // double targetSpeedRewardScale = 1.0; (forwardVelRewardCoeff_ / ((target_speed / 0.375 - 1) / targetSpeedRewardScale + 1))
-      auto cumulative_reward = forwardReward + workReward_ * workRewardCoeff_ + twoLegsReward + costOrientation * orientationReward +
+      auto cumulative_reward = forwardReward + workReward_ * workRewardCoeff_ +
                                cost_coeff * (footSlipReward_ * footSlipRewardCoeff_ + torqueReward_ * torqueRewardCoeff_ + contactReward_ * contactRewardCoeff_ + deltaContactReward_ * deltaContactRewardCoeff_ + deltaReleaseReward_ * deltaReleaseRewardCoeff_ +
                                              deltaTorqueReward_ * deltaTorqueRewardCoeff_ + actionReward_ * actionRewardCoeff_ + jointSpeedReward_ * jointSpeedRewardCoeff_ +
-                                            //  footClearenceReward_ * footClearenceRewardCoeff_ + upwardReward_ * upwardRewardCoeff_ +
-                                            footClearenceReward_ * footClearenceRewardCoeff_ +
+                                             footClearenceReward_ * footClearenceRewardCoeff_ + upwardReward_ * upwardRewardCoeff_ +
                                              yAccReward_ * yAccRewardCoeff_ + contactDistReward_ * contactDistRewardCoeff_ +
                                              contactChangeReward_ * contactChangeRewardCoeff_ + sidewaysReward_ * sidewaysRewardCoeff_);
 
-//      std::cout << "cumulative_reward " << cumulative_reward << std::endl;                                             
-
       cumulative_reward /= 100;
-      // std::cout << "cumulative_reward norm " << cumulative_reward << std::endl;
 
       // sometimes zero velocity leads to unstable training. So explicitly checking for nans and setting the velocities to zero
       if (isnan(cumulative_reward))
@@ -1299,30 +1225,29 @@ namespace raisim
       float term_pitch = 0.2;
       if ((isTest || isSlope || isEval))
         term_pitch = 0.8;
-      // if (abs(bodyOrientation_[0]) > 0.6 || abs(bodyOrientation_[1]) > term_pitch)
-      // if (abs(bodyOrientation_[0]) > 0.6)
-      // {
-      //   return true;
-      // }
+      if (abs(bodyOrientation_[0]) > 0.6 || abs(bodyOrientation_[1]) > term_pitch)
+      {
+        return true;
+      }
 
-      // double x = gc_[0];
-      // double y = gc_[1];
-      // double z_ht = (hm_) ? hm_->getHeight(x, y) : 0;
-      // double term_height = 0.24;
-      // if ((isTest || isSlope || isEval))
-      //   term_height = 0.1;
-      // if ((gc_[2] - z_ht) < term_height)
-      // {
-      //   return true;
-      // }
+      double x = gc_[0];
+      double y = gc_[1];
+      double z_ht = (hm_) ? hm_->getHeight(x, y) : 0;
+      double term_height = 0.24;
+      if ((isTest || isSlope || isEval))
+        term_height = 0.1;
+      if ((gc_[2] - z_ht) < term_height)
+      {
+        return true;
+      }
 
-      // if (not sampleCmds && not isEval)
-      // {
-      //   double yaw = bodyOrientation_[2];
-      //   if (abs(yaw) > 0.5) {
-      //     return true;
-      //   }
-      // }
+      if (not sampleCmds && not isEval)
+      {
+        double yaw = bodyOrientation_[2];
+        if (abs(yaw) > 0.5) {
+          return true;
+        }
+      }
 
       terminalReward = 0.f;
       int max_steps = 1200;
@@ -1451,15 +1376,6 @@ namespace raisim
     double forwardReward;
     double pid_coeff = 55;
     double slope_th = 0.15;
-
-    double twoLegsReward;
-    double goal_pitch = 1.0;
-    double goal_roll = 0.0;
-    double sigma = 0.75;
-    double orientationError;
-    double orientationReward;
-    double costOrientation;
-
 
     double current_torque_squareNorm;
 
