@@ -92,7 +92,9 @@ Third phase:
 ```
 cd raisimLib/raisimGymTorch/raisimGymTorch/env/envs/third_phase
 
-python runner.py --name random --debug --exptid 2 --loadpth ../../../../data/rsg_go1_task/model_05_03/ --loadid 14000 --enc_loadpth ../../../../data/dagger_ckpt/model_05_03/ --enc_loadid 1200 --overwrite
+python runner.py --name random --debug --exptid 1 --loadpth ../../../../data/rsg_go1_task/model_05_03/ --loadid 14000 --enc_loadpth ../../../../data/dagger_ckpt/model_05_03/ --enc_loadid 1200 --overwrite
+
+python save_mlp.py --debug --exptid 1 --loadpth ../../../../data/third_phase/0001/ --loadid 18000 --overwrite
 ```
 
 ### Visualizing a policy

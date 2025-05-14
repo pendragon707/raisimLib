@@ -97,11 +97,11 @@ if use_fourier:
     fourier_value = cfg['environment']['fourier_value']
 
 # save the configuration and other files
-saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/dagger_ckpt/" + '{:04d}'.format(args.exptid),
+saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/third_phase/" + '{:04d}'.format(args.exptid),
                            save_items=[task_path + "/Environment.hpp", task_path + "/runner.py"], config = cfg, overwrite = args.overwrite)
 if wandb:
     wandb.init(project='command_loco', config=dict(cfg), name=args.name)
-    wandb.save(home_path + '/raisimGymTorch/env/envs/dagger_ckpt/Environment.hpp')
+    wandb.save(home_path + '/raisimGymTorch/env/envs/third_phase/Environment.hpp')
 
 # Training
 n_steps = math.floor(cfg['environment']['max_time'] / cfg['environment']['control_dt'])
@@ -272,20 +272,20 @@ for update in range(500001) if args.loadid is None else range(args.loadid + 1, 5
     # obs = np.squeeze( obs[:,obs.shape[1]//2:112] )
     obs = np.squeeze( obs[:,:baseDim] )
 
-    print( "actual training obs ", obs.shape, " ", type(obs) )
+    # print( "actual training obs ", obs.shape, " ", type(obs) )
     obs_history = deque([obs]*50, maxlen=51)
-    print( len(obs_history) )
+    # print( len(obs_history) )
 
     for step in range(n_steps):
         obs = env.observe(not freeze_encoder)
         # obs = np.squeeze( obs[:,obs.shape[1]//2:112] )
         obs = np.squeeze( obs[:,:baseDim] )
-        print( "actual training obs ", obs.shape, " ", type(obs) )
+        # print( "actual training obs ", obs.shape, " ", type(obs) )
         
         push_history(obs_history, obs)
 
-        print( np.concatenate(obs_history).shape )
-        print( np.zeros(28, dtype=np.float32).shape )
+        # print( np.concatenate(obs_history).shape )
+        # print( np.zeros(28, dtype=np.float32).shape )
 
         obs = np.concatenate(
             [np.concatenate(obs_history), np.zeros(28, dtype=np.float32)]
@@ -300,7 +300,7 @@ for update in range(500001) if args.loadid is None else range(args.loadid + 1, 5
         forwardX = unscaled_reward_info[:, 0]
         penalty = unscaled_reward_info[:, 1:]
 
-        print( "ppo.step ", obs.shape)
+        # print( "ppo.step ", obs.shape)
         ppo.step(value_obs=obs, rews=reward, dones=dones, infos=[])
         done_sum = done_sum + sum(dones)
         reward_ll_sum = reward_ll_sum + sum(reward)
@@ -312,12 +312,12 @@ for update in range(500001) if args.loadid is None else range(args.loadid + 1, 5
     # take st step to get value obs
     obs = env.observe(not freeze_encoder)
     obs = np.squeeze( obs[:,:baseDim] )
-    print( "actual training obs ", obs.shape, " ", type(obs) )
+    # print( "actual training obs ", obs.shape, " ", type(obs) )
     
     push_history(obs_history, obs)
 
-    print( np.concatenate(obs_history).shape )
-    print( np.zeros(28, dtype=np.float32).shape )
+    # print( np.concatenate(obs_history).shape )
+    # print( np.zeros(28, dtype=np.float32).shape )
 
     obs = np.concatenate(
         [np.concatenate(obs_history), np.zeros(28, dtype=np.float32)]
@@ -326,18 +326,15 @@ for update in range(500001) if args.loadid is None else range(args.loadid + 1, 5
     # obs_torch = torch.from_numpy(obs).cpu().reshape(1, -1)
     obs = np.expand_dims(obs, axis=0)
 
-    print("PPO update!")
-    print( "ppo.update ", obs.shape)
+    # print("PPO update!")
+    # print( "ppo.update ", obs.shape)
 
     ppo.update(actor_obs=obs,
                value_obs=obs,
                log_this_iteration=update % 10 == 0,
                update=update)
-
-
-
     
-    print("PPO update end!")
+    # print("PPO update end!")
     
     end = time.time()
     

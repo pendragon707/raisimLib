@@ -42,14 +42,14 @@ class PPO:
             critic_obs_shape = critic.obs_shape[0]
 
         # TEMP ---------------------
-        print("NONENONEONOENONE")
-        print( " actor_obs_shape ", actor_obs_shape )
-        print( " critic_obs_shape ", critic_obs_shape )
+        # print("NONENONEONOENONE")
+        # print( " actor_obs_shape ", actor_obs_shape )
+        # print( " critic_obs_shape ", critic_obs_shape )
         actor_obs_shape = 2170
         critic_obs_shape = 2170       # 42*51 + 28
         # --------------------------
 
-        print("num_transitions_per_env ", num_transitions_per_env)
+        # print("num_transitions_per_env ", num_transitions_per_env)
 
         self.storage = RolloutStorage(num_envs, num_transitions_per_env, [critic_obs_shape], [actor_obs_shape], actor.action_shape, device)
         self.rl_coeff = 1
@@ -105,8 +105,8 @@ class PPO:
         print("Setting RL coeffs to {}".format(self.rl_coeff))
 
     def observe(self, actor_obs):
-        print( "observe ")
-        print( "actor_obs.shape ", actor_obs.shape )
+        # print( "observe ")
+        # print( "actor_obs.shape ", actor_obs.shape )
 
         # self.actor_obs = actor_obs[:,42*50:42*(50 + 1)]
         self.actor_obs = actor_obs
@@ -115,16 +115,16 @@ class PPO:
         self.actions, self.actions_log_prob = self.actor.sample(torch.from_numpy(actor_obs).to(self.device))
         # self.actions = np.clip(self.actions.numpy(), self.env.action_space.low, self.env.action_space.high)
 
-        print( "actions.shape ", self.actions.shape )
+        # print( "actions.shape ", self.actions.shape )
 
         return self.actions.cpu().numpy()
 
     def step(self, value_obs, rews, dones, infos):
-        print("step PPO")
+        # print("step PPO")
         value_obs = value_obs
         values = self.critic.predict(torch.from_numpy(value_obs).to(self.device))
         # values = self.critic.predict(torch.from_numpy(value_obs).to(self.device))[:, 0]
-        print("values ", values.shape )
+        # print("values ", values.shape )
         self.storage.add_transitions(self.actor_obs, value_obs, self.actions, rews, dones, values,
                                      self.actions_log_prob)
 
@@ -182,10 +182,20 @@ class PPO:
                     flat_actions = self.flat_expert.evaluate(actor_obs_batch)
                 else:
                     flat_actions = None
-                isSlope = actor_obs_batch[:,-1]
+                # isSlope = actor_obs_batch[:,-1]
+                isSlope = actions_batch
+                # print( "isSlope ", isSlope.shape )
+                # print( "isSlope ", actor_obs_batch.shape )                
+                # print( "isSlope ", actor_obs_batch[:,42*50:42*(50 + 1)].shape )
+                # print( "isSlope ", actions_batch.shape )
+                # print( "isSlope ", actions_batch[:,-1].shape )
+                
+
                 value_batch = self.critic.evaluate(critic_obs_batch)
 
                 # Surrogate loss
+                # print("actions_log_prob_batch ", actions_log_prob_batch.shape)
+                # print("old_actions_log_prob_batch ", old_actions_log_prob_batch.shape)
                 ratio = torch.exp(actions_log_prob_batch - torch.squeeze(old_actions_log_prob_batch))
                 surrogate = -torch.squeeze(advantages_batch) * ratio
                 surrogate_clipped = -torch.squeeze(advantages_batch) * torch.clamp(ratio, 1.0 - self.clip_param,
@@ -204,7 +214,15 @@ class PPO:
 
                 multiplicative_coeff_rl = self.rl_coeff*(1-isSlope) + isSlope
 
+
+                # print( "surrogate_loss ", surrogate_loss.shape)
+                # print( "value_loss ", value_loss.shape)
+                # print( "entropy_batch ", entropy_batch.shape)
+
                 rl_loss = (surrogate_loss + self.value_loss_coef * torch.squeeze(value_loss) - self.entropy_coef * entropy_batch)
+
+                # print("multiplicative_coeff_rl ", multiplicative_coeff_rl.shape)
+                # print("rl_loss ", rl_loss.shape)
                 rl_loss = (multiplicative_coeff_rl * rl_loss).mean()
                 if flat_actions is None:
                     loss = rl_loss
