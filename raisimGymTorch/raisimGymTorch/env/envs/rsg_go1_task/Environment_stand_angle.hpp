@@ -705,8 +705,11 @@ namespace raisim
       upwardRewardCoeff_ = 0.0;
       if (sample_goal_rand_num > 0.6)
       {
-        delta_max_speed = -0.5 + 0.15 * (Eigen::VectorXd::Random(1)[0] / 2 + 0.5); // 0. 
-        delta_ang_speed = 0.0 * ((std::rand() % 2) * 2 - 1) * (0.6);               // 0. 
+        // delta_max_speed = -0.5 + 0.15 * (Eigen::VectorXd::Random(1)[0] / 2 + 0.5); // 0. 
+        // delta_ang_speed = 0.0 * ((std::rand() % 2) * 2 - 1) * (0.6);               // 0. 
+
+        delta_max_speed = 0.0 * ((std::rand() % 2) * 2 - 1) * (0.6); // 0. 
+        delta_ang_speed = -0.5 + 0.15 * (Eigen::VectorXd::Random(1)[0] / 2 + 0.5);    // 0. [0.15; 0.25]
         actionRewardCoeff_ = -1.0;
         upwardRewardCoeff_ = -3.0;
         adaptiveForwardVelRewardCoeff_ = 2.0 * forwardVelRewardCoeff_;
@@ -714,8 +717,11 @@ namespace raisim
       }
       else
       {
-        delta_max_speed = -0.05 + 0.1 * Eigen::VectorXd::Random(1)[0]; // 0.35 ~ 0.55
-        delta_ang_speed = 0.4 * Eigen::VectorXd::Random(1)[0];           // -0.4 ~ 0.4
+        // delta_max_speed = -0.05 + 0.1 * Eigen::VectorXd::Random(1)[0]; // 0.35 ~ 0.55
+        // delta_ang_speed = 0.4 * Eigen::VectorXd::Random(1)[0];           // -0.4 ~ 0.4
+
+        delta_max_speed = 0.1 * Eigen::VectorXd::Random(1)[0]; // -0.1 ~ 0.1
+        delta_ang_speed = -0.05 + 0.1 * Eigen::VectorXd::Random(1)[0];           // 0.25 ~ 0.45
         actionRewardCoeff_ = 0.;
         adaptiveForwardVelRewardCoeff_ = forwardVelRewardCoeff_;
         adaptiveAngularVelRewardCoeff_ = angularVelRewardCoeff_;
@@ -724,12 +730,18 @@ namespace raisim
       if (not sampleCmds)
       {
         adaptiveForwardVelRewardCoeff_ = forwardVelRewardCoeff_;
-        delta_max_speed = -0.05 + 0.05 * Eigen::VectorXd::Random(1)[0]; // 0.4 ~ 0.5
-        delta_ang_speed = 0.2 * Eigen::VectorXd::Random(1)[0];          // -0.2 ~ 0.2
+        // delta_max_speed = -0.05 + 0.05 * Eigen::VectorXd::Random(1)[0]; // 0.4 ~ 0.5
+        // delta_ang_speed = 0.2 * Eigen::VectorXd::Random(1)[0];          // -0.2 ~ 0.2
+
+        delta_max_speed = 0.05 * Eigen::VectorXd::Random(1)[0]; // -0.05 ~ 0.05
+        delta_ang_speed = -0.05 + 0.05 * Eigen::VectorXd::Random(1)[0];          // 0.4 ~ 0.3
       }
 
-      max_speed = 0.5 + delta_max_speed;
-      ang_speed = 0.0 + delta_ang_speed;
+      // max_speed = 0.5 + delta_max_speed;
+      // ang_speed = 0.0 + delta_ang_speed;
+
+      max_speed = 0.0 + delta_max_speed;
+      ang_speed = 0.5 + delta_ang_speed;
 
 
       speed_vec.setZero();
@@ -844,13 +856,14 @@ namespace raisim
             rand_terrain_select = std::rand() % 100; // 2 + 1; // either step or terrains
           }
 
-	     if (isEval) {
-	       if (rand_terrain_select < 30) add_random_terrain();
-	       else if (rand_terrain_select < 100) add_stairs();
-	     } else {
-	       if (rand_terrain_select < 40) add_random_terrain();
-	       else if (rand_terrain_select < 100) add_stairs();
-	     }
+      add_random_terrain();
+	    //  if (isEval) {
+	    //    if (rand_terrain_select < 30) add_random_terrain();
+	    //    else if (rand_terrain_select < 100) add_stairs();
+	    //  } else {
+	    //    if (rand_terrain_select < 40) add_random_terrain();
+	    //    else if (rand_terrain_select < 100) add_stairs();
+	    //  }
         }
       }
 
@@ -955,12 +968,25 @@ namespace raisim
 
     double compute_forward_reward()
     {
+      // double r = 0.;
+      // double forward_r = adaptiveForwardVelRewardCoeff_ * std::min(max_speed, bodyLinearVel_[0]);
+      // // Do not go too fast, but track!
+      // if (isDown && bodyLinearVel_[0] > (max_speed+0.1))
+      // 	forward_r -= adaptiveForwardVelRewardCoeff_ * (bodyLinearVel_[0] - max_speed);
+      // double angular_r = adaptiveAngularVelRewardCoeff_ * (-std::abs(ang_speed - bodyAngularVel_[2]) + std::abs(ang_speed));
+      // r += forward_r;
+      // r += -abs(bodyLinearVel_[1]);
+      // r += angular_r;
+      // r += (alive_bonus * 1. / (2. - (double)isSlope));
+      // return r;
+
       double r = 0.;
-      double forward_r = adaptiveForwardVelRewardCoeff_ * std::min(max_speed, bodyLinearVel_[0]);
-      // Do not go too fast, but track!
+      double angular_r = adaptiveAngularVelRewardCoeff_ * std::min(ang_speed, bodyLinearVel_[2]);
+      double forward_r = adaptiveForwardVelRewardCoeff_ * (-std::abs(max_speed - bodyAngularVel_[0]) + std::abs(max_speed) );
+
       if (isDown && bodyLinearVel_[0] > (max_speed+0.1))
-      	forward_r -= adaptiveForwardVelRewardCoeff_ * (bodyLinearVel_[0] - max_speed);
-      double angular_r = adaptiveAngularVelRewardCoeff_ * (-std::abs(ang_speed - bodyAngularVel_[2]) + std::abs(ang_speed));
+        forward_r -= adaptiveForwardVelRewardCoeff_ * (bodyLinearVel_[0] - max_speed);
+
       r += forward_r;
       r += -abs(bodyLinearVel_[1]);
       r += angular_r;
@@ -1146,6 +1172,8 @@ namespace raisim
       bodyLinearVel_ = rot.e().transpose() * gv_.segment(0, 3);
       bodyAngularVel_ = rot.e().transpose() * gv_.segment(3, 3);
 
+      
+
       // Low pass on speed
       if (step_counter <= 1)
       {
@@ -1158,8 +1186,11 @@ namespace raisim
         avgYawVel = (1 - bodyLinearVel_avg_weight) * avgYawVel + bodyLinearVel_avg_weight * bodyAngularVel_[2];
       }
 
-      if (isTest && step_counter % 50 == 1)
+      if (isTest && step_counter % 50 == 1) {
+        // if (step_counter % 50 == 1) {
+        std::cout << "bodyAngularVel_ " << bodyAngularVel_[0] << " " << bodyAngularVel_[1] << " " << bodyAngularVel_[2] << std::endl;  
         std::cout << "\t actual speed: " << bodyLinearVel_[0] << ' ' << bodyLinearVel_[1]  << ' ' << bodyAngularVel_[2] << std::endl;
+      }
 
       quatToEuler(quat, bodyOrientation_);
       double phase = (step_counter % 100) * 1.0 / 50.0;
@@ -1333,7 +1364,7 @@ namespace raisim
     raisim::HeightMap *hm_ = nullptr;
     std::vector<int> link_ids;
     std::vector<double> base_mass_list;
-    std::vector<double> step_height_list = {0.1, 0.13, 0.15, 0.17, 0.19, 0.21, 0.23, 0.25, 0.27, 0.3};
+    std::vector<double> step_height_list = {0.1, 0.13, 0.15, 0.17, 0.19, 0.21, 0.23};
     int start_itr_stairs = 1200;
     std::deque<Eigen::VectorXd> obs_history;
     std::deque<Eigen::VectorXd> act_history;
@@ -1342,7 +1373,7 @@ namespace raisim
 
     // use 0.05 for a blind policy, 0.15 for a vision policy. This control the distance in lookahead
     std::vector<double> g1_position = {0.05}; //, 0.15
-    std::vector<double> step_length_list = {0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.35, 0.28, 0.45, 0.25};
+    std::vector<double> step_length_list = {0.6, 0.5, 0.4, 0.3, 0.35, 0.28, 0.45, 0.25};
     int lookahead_idx = 0;
     int max_step_idx = 1;
 
