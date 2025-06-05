@@ -1333,7 +1333,7 @@ namespace raisim
     raisim::HeightMap *hm_ = nullptr;
     std::vector<int> link_ids;
     std::vector<double> base_mass_list;
-    std::vector<double> step_height_list = {0.1, 0.13, 0.15, 0.17, 0.19, 0.21, 0.23, 0.25, 0.27, 0.3};
+    std::vector<double> step_height_list = {0.1, 0.13, 0.15, 0.17, 0.19, 0.21, 0.23};
     int start_itr_stairs = 1200;
     std::deque<Eigen::VectorXd> obs_history;
     std::deque<Eigen::VectorXd> act_history;
@@ -1342,7 +1342,7 @@ namespace raisim
 
     // use 0.05 for a blind policy, 0.15 for a vision policy. This control the distance in lookahead
     std::vector<double> g1_position = {0.05}; //, 0.15
-    std::vector<double> step_length_list = {0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.35, 0.28, 0.45, 0.25};
+    std::vector<double> step_length_list = {0.6, 0.5, 0.4, 0.3, 0.35, 0.28, 0.45, 0.25};
     int lookahead_idx = 0;
     int max_step_idx = 1;
 
