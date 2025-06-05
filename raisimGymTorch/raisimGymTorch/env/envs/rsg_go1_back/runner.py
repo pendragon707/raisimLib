@@ -1,6 +1,6 @@
 from statistics import geometric_mean
 from ruamel.yaml import YAML, dump, RoundTripDumper
-from raisimGymTorch.env.bin import rsg_go1_task
+from raisimGymTorch.env.bin import rsg_go1_back
 from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
 from raisimGymTorch.helper.raisim_gym_helper import ConfigurationSaver
 import os
@@ -64,7 +64,7 @@ geomDim = int(cfg['environment']['geomDim'])*int(cfg['environment']['use_slope_d
 n_futures = int(cfg['environment']['n_futures'])
 
 # create environment from the configuration file
-env = VecEnv(rsg_go1_task.RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
+env = VecEnv(rsg_go1_back.RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
 
 # shortcuts
 ob_dim = env.num_obs
@@ -136,21 +136,21 @@ else:
     else:
         raise NotImplementedError()
 
-flat_policy_load_path = os.path.join(task_path,"../../../../data/rsg_go1_ground/0001/policy_26000.pt")
+flat_policy_load_path = os.path.join(task_path,"../../../../data/rsg_go1_ground/0001/policy_14000.pt")
 env.load_scaling(os.path.join(task_path, "../../../../data/rsg_go1_ground/0001"),
-                  22000, policy_type=0, num_g1=n_futures, clip=clip)
+                  14000, policy_type=0, num_g1=n_futures, clip=clip)
 loaded_graph_flat = torch.jit.load(flat_policy_load_path, map_location=torch.device(device_type))
 flat_expert = ppo_module.Steps_Expert(loaded_graph_flat, device=device_type, baseDim=42,
                                       geomDim=2, n_futures=1, num_g1=n_futures)
 
 
-checkpoint = torch.load(os.path.join(task_path,"../../../../data/rsg_go1_ground/0001/full_26000.pt"))
+checkpoint = torch.load(os.path.join(task_path,"../../../../data/rsg_go1_ground/0001/full_14000.pt"))
 blind_policy_state_dict = checkpoint['actor_architecture_state_dict']
 own_state = actor.architecture.state_dict()
 for name, param in blind_policy_state_dict.items():
     own_state[name].copy_(param)
 env.load_scaling(os.path.join(task_path, "../../../../data/rsg_go1_ground/0001"),
-                 22000, policy_type=2, num_g1=n_futures, clip=clip)
+                 14000, policy_type=2, num_g1=n_futures, clip=clip)
 
 ppo = PPO.PPO(actor=actor,
               critic=critic,

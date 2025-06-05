@@ -1,6 +1,6 @@
 from statistics import geometric_mean
 from ruamel.yaml import YAML, dump, RoundTripDumper
-from raisimGymTorch.env.bin import rsg_go1_task
+from raisimGymTorch.env.bin import rsg_go1_left
 from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
 from raisimGymTorch.helper.raisim_gym_helper import ConfigurationSaver
 import os
@@ -50,9 +50,11 @@ if args.debug:
     cfg['environment']['num_threads'] = 1
     device_type = 'cpu'
     clip = True
+    expand = True
 else:
     device_type = 'cuda:{}'.format(args.gpu)
     clip = False
+    expand = False
 
 cfg['environment']['test'] = False
 cfg['environment']['speedTest'] = False
@@ -64,7 +66,7 @@ geomDim = int(cfg['environment']['geomDim'])*int(cfg['environment']['use_slope_d
 n_futures = int(cfg['environment']['n_futures'])
 
 # create environment from the configuration file
-env = VecEnv(rsg_go1_task.RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
+env = VecEnv(rsg_go1_left.RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
 
 # shortcuts
 ob_dim = env.num_obs
@@ -82,11 +84,11 @@ if use_fourier:
     fourier_value = cfg['environment']['fourier_value']
 
 # save the configuration and other files
-saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/rsg_go1_task/" + '{:04d}'.format(args.exptid),
+saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/rsg_go1_left/" + '{:04d}'.format(args.exptid),
                            save_items=[task_path + "/Environment.hpp", task_path + "/runner.py"], config = cfg, overwrite = args.overwrite)
 if wandb:
     wandb.init(project='command_loco', config=dict(cfg), name=args.name)
-    wandb.save(home_path + '/raisimGymTorch/env/envs/rsg_go1_task/Environment.hpp')
+    wandb.save(home_path + '/raisimGymTorch/env/envs/rsg_go1_left/Environment.hpp')
 
 # Training
 n_steps = math.floor(cfg['environment']['max_time'] / cfg['environment']['control_dt'])
@@ -135,30 +137,12 @@ else:
     else:
         raise NotImplementedError()
 
-# Steps + flat policy
-flat_policy_load_path = os.path.join(task_path,"../../../../data/base_policy/policy_22000.pt")
-env.load_scaling(os.path.join(task_path, "../../../../data/base_policy"),
-                 22000, policy_type=0, num_g1=n_futures, clip=clip)
-loaded_graph_flat = torch.jit.load(flat_policy_load_path, map_location=torch.device(device_type))
-flat_expert = ppo_module.Steps_Expert(loaded_graph_flat, device=device_type, baseDim=42,
-                                      geomDim=2, n_futures=1, num_g1=n_futures)
-
 # flat_policy_load_path = os.path.join(task_path,"../../../../data/run_policy/policy_14000.pt")
 # env.load_scaling(os.path.join(task_path, "../../../../data/run_policy"),
 #                  14000, policy_type=0, num_g1=n_futures, clip=clip)
 # loaded_graph_flat = torch.jit.load(flat_policy_load_path, map_location=torch.device(device_type))
 # flat_expert = ppo_module.Steps_Expert(loaded_graph_flat, device=device_type, baseDim=42,
 #                                       geomDim=2, n_futures=1, num_g1=n_futures)
-
-
-# Encoders loading from blind stairs policy
-checkpoint = torch.load(os.path.join(task_path,"../../../../data/base_policy/full_22000.pt"), map_location=device_type)
-blind_policy_state_dict = checkpoint['actor_architecture_state_dict']
-own_state = actor.architecture.state_dict()
-for name, param in blind_policy_state_dict.items():
-    own_state[name].copy_(param)
-env.load_scaling(os.path.join(task_path, "../../../../data/base_policy"),
-                 22000, policy_type=2, num_g1=n_futures, clip=clip)
 
 # checkpoint = torch.load(os.path.join(task_path,"../../../../data/run_policy/full_14000.pt"), map_location=device_type)
 # blind_policy_state_dict = checkpoint['actor_architecture_state_dict']
@@ -167,6 +151,21 @@ env.load_scaling(os.path.join(task_path, "../../../../data/base_policy"),
 #     own_state[name].copy_(param)
 # env.load_scaling(os.path.join(task_path, "../../../../data/run_policy"),
 #                  14000, policy_type=2, num_g1=n_futures, clip=clip)
+
+flat_policy_load_path = os.path.join(task_path,"../../../../data/rsg_go1_ground/0001/policy_26000.pt")
+env.load_scaling(os.path.join(task_path, "../../../../data/rsg_go1_ground/0001"),
+                  26000, policy_type=0, num_g1=n_futures, clip=clip)
+loaded_graph_flat = torch.jit.load(flat_policy_load_path, map_location=torch.device(device_type))
+flat_expert = ppo_module.Steps_Expert(loaded_graph_flat, device=device_type, baseDim=42,
+                                      geomDim=2, n_futures=1, num_g1=n_futures)
+
+checkpoint = torch.load(os.path.join(task_path,"../../../../data/rsg_go1_ground/0001/full_26000.pt"))
+blind_policy_state_dict = checkpoint['actor_architecture_state_dict']
+own_state = actor.architecture.state_dict()
+for name, param in blind_policy_state_dict.items():
+    own_state[name].copy_(param)
+env.load_scaling(os.path.join(task_path, "../../../../data/rsg_go1_ground/0001"),
+                 26000, policy_type=2, num_g1=n_futures, clip=clip)
 
 ppo = PPO.PPO(actor=actor,
               critic=critic,
@@ -198,7 +197,7 @@ if args.loadid is not None:
         ppo.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     except:
         print("Not loading ppo state")
-    env.load_scaling(saver.data_dir, args.loadid, policy_type=1, expand=True) 
+    env.load_scaling(saver.data_dir, args.loadid, policy_type=1, expand=expand) 
 
 if freeze_encoder:
     # do not update some networks
