@@ -50,9 +50,11 @@ if args.debug:
     cfg['environment']['num_threads'] = 1
     device_type = 'cpu'
     clip = True
+    expand = True
 else:
     device_type = 'cuda:{}'.format(args.gpu)
     clip = False
+    expand = False
 
 cfg['environment']['test'] = False
 cfg['environment']['speedTest'] = False
@@ -198,7 +200,7 @@ if args.loadid is not None:
         ppo.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     except:
         print("Not loading ppo state")
-    env.load_scaling(saver.data_dir, args.loadid, policy_type=1, expand=True) 
+    env.load_scaling(saver.data_dir, args.loadid, policy_type=1, expand=expand) 
 
 if freeze_encoder:
     # do not update some networks

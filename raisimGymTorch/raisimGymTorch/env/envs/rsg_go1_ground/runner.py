@@ -13,10 +13,11 @@ import numpy as np
 import torch
 import datetime
 import argparse
-try:
-    import wandb
-except:
-    wandb = None
+# try:
+#     import wandb
+# except:
+#     wandb = None
+wandb = None
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--exptid", type = int, help='experiment id to prepend to the run')
@@ -46,8 +47,12 @@ if args.debug:
     cfg['environment']['num_envs'] = 1
     cfg['environment']['num_threads'] = 1
     device_type = 'cpu'
+    clip = True
+    expand = True
 else:
     device_type = 'cuda:{}'.format(args.gpu)
+    clip = False
+    expand = False
 
 cfg['environment']['test'] = False
 cfg['environment']['speedTest'] = False
@@ -133,18 +138,18 @@ else:
 # Steps + flat policy
 flat_policy_load_path = os.path.join(task_path,"../../../../data/base_policy/policy_22000.pt")
 env.load_scaling(os.path.join(task_path, "../../../../data/base_policy"),
-                 22000, policy_type=0, num_g1=n_futures)
+                 22000, policy_type=0, num_g1=n_futures, clip=clip)
 loaded_graph_flat = torch.jit.load(flat_policy_load_path, map_location=torch.device(device_type))
 flat_expert = ppo_module.Steps_Expert(loaded_graph_flat, device=device_type, baseDim=42,
                                       geomDim=2, n_futures=1, num_g1=n_futures)
 # Encoders loading from blind stairs policy
-checkpoint = torch.load(os.path.join(task_path,"../../../../data/base_policy/full_22000.pt"))
+checkpoint = torch.load(os.path.join(task_path,"../../../../data/base_policy/full_22000.pt"), map_location=device_type)
 blind_policy_state_dict = checkpoint['actor_architecture_state_dict']
 own_state = actor.architecture.state_dict()
 for name, param in blind_policy_state_dict.items():
     own_state[name].copy_(param)
 env.load_scaling(os.path.join(task_path, "../../../../data/base_policy"),
-                 22000, policy_type=2, num_g1=n_futures)
+                 22000, policy_type=2, num_g1=n_futures, clip=clip)
 
 
 ppo = PPO.PPO(actor=actor,
@@ -177,7 +182,7 @@ if args.loadid is not None:
         ppo.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     except:
         print("Not loading ppo state")
-    env.load_scaling(saver.data_dir, args.loadid, policy_type=1) 
+    env.load_scaling(saver.data_dir, args.loadid, policy_type=1, expand=expand) 
 
 if freeze_encoder:
     # do not update some networks

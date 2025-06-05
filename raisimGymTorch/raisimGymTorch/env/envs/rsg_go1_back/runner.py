@@ -48,9 +48,11 @@ if args.debug:
     cfg['environment']['num_threads'] = 1
     device_type = 'cpu'
     clip = True
+    expand = True
 else:
     device_type = 'cuda:{}'.format(args.gpu)
     clip = False
+    expand = False
 
 cfg['environment']['test'] = False
 cfg['environment']['speedTest'] = False
@@ -136,7 +138,7 @@ else:
 
 flat_policy_load_path = os.path.join(task_path,"../../../../data/rsg_go1_ground/0001/policy_26000.pt")
 env.load_scaling(os.path.join(task_path, "../../../../data/rsg_go1_ground/0001"),
-                  22000, policy_type=0, num_g1=n_futures)
+                  22000, policy_type=0, num_g1=n_futures, clip=clip)
 loaded_graph_flat = torch.jit.load(flat_policy_load_path, map_location=torch.device(device_type))
 flat_expert = ppo_module.Steps_Expert(loaded_graph_flat, device=device_type, baseDim=42,
                                       geomDim=2, n_futures=1, num_g1=n_futures)
@@ -148,7 +150,7 @@ own_state = actor.architecture.state_dict()
 for name, param in blind_policy_state_dict.items():
     own_state[name].copy_(param)
 env.load_scaling(os.path.join(task_path, "../../../../data/rsg_go1_ground/0001"),
-                 22000, policy_type=2, num_g1=n_futures)
+                 22000, policy_type=2, num_g1=n_futures, clip=clip)
 
 ppo = PPO.PPO(actor=actor,
               critic=critic,
@@ -180,7 +182,7 @@ if args.loadid is not None:
         ppo.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     except:
         print("Not loading ppo state")
-    env.load_scaling(saver.data_dir, args.loadid, policy_type=1) 
+    env.load_scaling(saver.data_dir, args.loadid, policy_type=1, expand=expand) 
 
 if freeze_encoder:
     # do not update some networks
