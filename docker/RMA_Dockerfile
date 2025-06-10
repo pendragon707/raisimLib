@@ -16,7 +16,7 @@ ENV PATH=/root/miniconda3/bin:$PATH
 WORKDIR /home
 
 COPY ./rma.yml .
-RUN conda env create -n rma --file /rma.yml
+RUN conda env create -n rma --file /home/rma.yml
 
 COPY rma_entry.sh .
 COPY . raisimLib
