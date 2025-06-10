@@ -13,10 +13,7 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
 
 ENV PATH=/root/miniconda3/bin:$PATH
 
-WORKDIR /home
-
 COPY ./rma.yml .
-RUN conda env create -n rma --file /home/rma.yml
+RUN conda env create -n rma --file /rma.yml
 
 COPY rma_entry.sh .
-COPY . raisimLib
