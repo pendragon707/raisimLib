@@ -145,14 +145,6 @@ loaded_graph_flat = torch.jit.load(flat_policy_load_path, map_location=torch.dev
 flat_expert = ppo_module.Steps_Expert(loaded_graph_flat, device=device_type, baseDim=42,
                                       geomDim=2, n_futures=1, num_g1=n_futures)
 
-# flat_policy_load_path = os.path.join(task_path,"../../../../data/run_policy/policy_14000.pt")
-# env.load_scaling(os.path.join(task_path, "../../../../data/run_policy"),
-#                  14000, policy_type=0, num_g1=n_futures, clip=clip)
-# loaded_graph_flat = torch.jit.load(flat_policy_load_path, map_location=torch.device(device_type))
-# flat_expert = ppo_module.Steps_Expert(loaded_graph_flat, device=device_type, baseDim=42,
-#                                       geomDim=2, n_futures=1, num_g1=n_futures)
-
-
 # Encoders loading from blind stairs policy
 checkpoint = torch.load(os.path.join(task_path,"../../../../data/base_policy/full_22000.pt"), map_location=device_type)
 blind_policy_state_dict = checkpoint['actor_architecture_state_dict']
@@ -161,14 +153,6 @@ for name, param in blind_policy_state_dict.items():
     own_state[name].copy_(param)
 env.load_scaling(os.path.join(task_path, "../../../../data/base_policy"),
                  22000, policy_type=2, num_g1=n_futures, clip=clip)
-
-# checkpoint = torch.load(os.path.join(task_path,"../../../../data/run_policy/full_14000.pt"), map_location=device_type)
-# blind_policy_state_dict = checkpoint['actor_architecture_state_dict']
-# own_state = actor.architecture.state_dict()
-# for name, param in blind_policy_state_dict.items():
-#     own_state[name].copy_(param)
-# env.load_scaling(os.path.join(task_path, "../../../../data/run_policy"),
-#                  14000, policy_type=2, num_g1=n_futures, clip=clip)
 
 ppo = PPO.PPO(actor=actor,
               critic=critic,

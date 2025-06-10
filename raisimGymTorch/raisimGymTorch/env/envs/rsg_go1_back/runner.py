@@ -136,21 +136,23 @@ else:
     else:
         raise NotImplementedError()
 
-flat_policy_load_path = os.path.join(task_path,"../../../../data/rsg_go1_ground/0001/policy_14000.pt")
+flat_policy_load_path = os.path.join(task_path,"../../../../data/rsg_go1_ground/0001/policy_22000.pt")
 env.load_scaling(os.path.join(task_path, "../../../../data/rsg_go1_ground/0001"),
-                  14000, policy_type=0, num_g1=n_futures, clip=clip)
+                  22000, policy_type=0, num_g1=n_futures, expand=expand)
+                #   22000, policy_type=0, num_g1=n_futures, clip=clip)
 loaded_graph_flat = torch.jit.load(flat_policy_load_path, map_location=torch.device(device_type))
 flat_expert = ppo_module.Steps_Expert(loaded_graph_flat, device=device_type, baseDim=42,
                                       geomDim=2, n_futures=1, num_g1=n_futures)
 
 
-checkpoint = torch.load(os.path.join(task_path,"../../../../data/rsg_go1_ground/0001/full_14000.pt"))
+checkpoint = torch.load(os.path.join(task_path,"../../../../data/rsg_go1_ground/0001/full_22000.pt"))
 blind_policy_state_dict = checkpoint['actor_architecture_state_dict']
 own_state = actor.architecture.state_dict()
 for name, param in blind_policy_state_dict.items():
     own_state[name].copy_(param)
 env.load_scaling(os.path.join(task_path, "../../../../data/rsg_go1_ground/0001"),
-                 14000, policy_type=2, num_g1=n_futures, clip=clip)
+                 22000, policy_type=2, num_g1=n_futures, expand=expand)
+                #  22000, policy_type=2, num_g1=n_futures, clip=clip)
 
 ppo = PPO.PPO(actor=actor,
               critic=critic,
