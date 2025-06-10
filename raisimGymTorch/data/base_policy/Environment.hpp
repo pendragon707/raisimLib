@@ -115,7 +115,7 @@ namespace raisim
       READ_YAML(double, alive_bonus, cfg["aliveBonus"])
 
       a1_ = world_->addArticulatedSystem(resourceDir_ + "/aliengo/aliengo.urdf");
-      a1_->setName("aliengo");
+      a1_->setName("a1");
       a1_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
 
       /// indices of links that should not make contact with ground
@@ -1247,7 +1247,7 @@ namespace raisim
       }
 
       terminalReward = 0.f;
-      int max_steps = 1200;
+      int max_steps = 10;
 
       if (step_counter > max_steps)
         return true;

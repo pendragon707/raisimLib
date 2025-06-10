@@ -1,5 +1,4 @@
 from statistics import geometric_mean
-from torch.distributions import Normal
 from ruamel.yaml import YAML, dump, RoundTripDumper
 from raisimGymTorch.env.bin import rsg_a1_task
 from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
@@ -139,7 +138,7 @@ loaded_graph_flat = torch.jit.load(flat_policy_load_path, map_location=torch.dev
 flat_expert = ppo_module.Steps_Expert(loaded_graph_flat, device=device_type, baseDim=42,
                                       geomDim=2, n_futures=1, num_g1=n_futures)
 # Encoders loading from blind stairs policy
-checkpoint = torch.load(os.path.join(task_path,"../../../../data/base_policy/full_22000.pt"),  map_location='cuda:0')
+checkpoint = torch.load(os.path.join(task_path,"../../../../data/base_policy/full_22000.pt"),map_location='cuda:0')
 blind_policy_state_dict = checkpoint['actor_architecture_state_dict']
 own_state = actor.architecture.state_dict()
 for name, param in blind_policy_state_dict.items():
@@ -193,7 +192,7 @@ if args.loadid is not None:
 
 
 # This coefficient controls how much the policy is optimized with RL. Change to 1 for taking away demonstrations from a previous policy.
-rl_coeff = 0.3
+rl_coeff = 1 # 0.3
 ppo.update_rl_coeff(rl_coeff)
 
 
