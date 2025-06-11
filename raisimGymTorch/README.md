@@ -142,3 +142,9 @@ You can follow exactly the same steps as for the priviledged policy (but now run
 ### Using a blind policy on a real robot
 
 If you want to use a policy you trained on a real robot, you should first move it in the [models folder](https://github.com/antonilo/vision_locomotion/tree/master/controller/models), change the path to the model in the [launch_file](https://github.com/antonilo/vision_locomotion/blob/master/controller/launch/cms_ros.launch#L7) and the policy id in the [parameter_file](https://github.com/antonilo/vision_locomotion/blob/master/controller/parameters/default.yaml#L2). 
+
+
+```
+xhost si:localuser:root
+docker run --rm -it --ipc=host --gpus all --net=host -v .:/workspace --volume=$HOME/.Xauthority:/root/.Xauthority:rw -e NVIDIA_DRIVER_CAPABILITIES=all -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix --privileged rma-conda bash
+```

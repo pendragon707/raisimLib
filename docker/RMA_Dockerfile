@@ -2,6 +2,7 @@ FROM ros:noetic
 
 RUN apt-get update && \
     apt-get install -y wget mesa-utils && \
+    sudo apt-get install libeigen3-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
