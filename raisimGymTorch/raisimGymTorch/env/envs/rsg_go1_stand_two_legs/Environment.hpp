@@ -443,6 +443,165 @@ namespace raisim
                                  terrainProp_.xSize, +terrainProp_.xSize / 3 + 1.0, 0.0, heights_, "terrain");
     }
 
+    void add_stairs()
+    {
+      isSlope = true;
+      sampleCmds = false;
+      int max_height_idx = std::max(1, (int)((itr_number - start_itr_stairs) / 1000));
+      max_height_idx = std::min(max_height_idx, (int)step_height_list.size());
+      canonical_step_height = step_height_list[std::rand() % max_height_idx];
+      double sign = 1;
+      useRef = true;
+      isDown = false;
+      bool down;
+      if (isEval)
+       down = Eigen::VectorXd::Random(1)[0] > 0;
+      else
+       down = Eigen::VectorXd::Random(1)[0] > -0.5;
+      if (down){
+        sign = -1.;
+	      useRef = false;
+	      isDown = true;
+      	max_height_idx = std::min(max_height_idx, ((int)step_height_list.size()-3));
+      	canonical_step_height = step_height_list[std::rand() % max_height_idx];
+      }
+      double stepHeight = sign * canonical_step_height; // 0.03 + sign * 0.05 * Eigen::VectorXd::Random(1)[0];
+
+      // now step lenght
+      double stepLength = step_length_list[std::rand() % max_step_idx];
+
+      // fractal first
+      raisim::TerrainProperties terrainProperties;
+      terrainProperties.frequency = 20; // 10
+
+      double zscale_val = 0.0;
+      if (isDown)
+	zscale_val = 0.20;
+      if (isTest)
+        zscale_val = 0.0;
+
+
+      terrainProperties.zScale = zscale_val;
+      terrainProperties.xSize = 12; // maybe 12
+      terrainProperties.ySize = 12;
+      terrainProperties.xSamples = 200; // maybe 200
+      terrainProperties.ySamples = 200;
+      terrainProperties.fractalOctaves = 2;
+      terrainProperties.fractalLacunarity = 2.0;
+      terrainProperties.fractalGain = 0.25;
+      hm_ = world_->addHeightMap(0.0, 0.0, terrainProperties);
+
+      double pixelSize_ = 0.02;
+      double gridSize_ = 0.025;
+      raisim::TerrainProperties terrainProp_;
+      terrainProp_.xSize = 12.0;
+      terrainProp_.ySize = 12.0;
+      terrainProp_.xSamples = terrainProp_.xSize / pixelSize_;
+      terrainProp_.ySamples = terrainProp_.ySize / pixelSize_;
+
+      std::vector<double> heights_;
+      heights_.resize(terrainProp_.xSamples * terrainProp_.ySamples);
+
+      int N = (int)(stepLength / pixelSize_);
+      int mids = (int)(1.2 / pixelSize_);
+      int mid0 = 0.5 * terrainProp_.xSamples - (int)(1.2 / pixelSize_);
+      int mid1 = 0.5 * terrainProp_.xSamples + (int)(0.0 / pixelSize_);
+      double max = 0.2;
+      double stepStart = max; // stepHeight; // * (mid0 / N);
+      int cnt = 0;
+      bool chamfer = false;
+      // start platform
+      for (int x = 0; x < mids; x++)
+      {
+        for (int y = 0; y < terrainProp_.xSamples; y++)
+        {
+          size_t idx = x * terrainProp_.xSamples + y;
+          heights_[idx] = max;
+        }
+      }
+
+      for (int x = mids; x < mid0; x++)
+      {
+        if (cnt == N)
+        {
+          stepStart = max;
+          cnt = 0;
+        }
+        if (cnt == 0 && Eigen::VectorXd::Random(1)[0] < 0)
+          chamfer = true;
+        else
+          chamfer = false;
+        for (int y = 0; y < terrainProp_.xSamples; y++)
+        {
+          size_t idx = x * terrainProp_.xSamples + y;
+          max = stepStart + stepHeight;
+          heights_[idx] = max;
+          if (chamfer)
+            heights_[idx] -= gridSize_;
+        }
+        cnt++;
+      }
+
+      for (int x = mid0; x < mid1; x++)
+      {
+        for (int y = 0; y < terrainProp_.xSamples; y++)
+        {
+          size_t idx = x * terrainProp_.xSamples + y;
+          heights_[idx] = max;
+        }
+      }
+
+      cnt = N;
+      for (int x = mid1; x < terrainProp_.ySamples; x++)
+      {
+        if (cnt == N)
+        {
+          stepStart = max;
+          cnt = 0;
+        }
+        if (cnt == 0 && Eigen::VectorXd::Random(1)[0] < 0)
+          chamfer = true;
+        else
+          chamfer = false;
+        for (int y = 0; y < terrainProp_.xSamples; y++)
+        {
+          size_t idx = x * terrainProp_.xSamples + y;
+          max = stepStart + stepHeight;
+          heights_[idx] = max;
+          if (chamfer)
+            heights_[idx] -= gridSize_;
+        }
+        cnt++;
+      }
+
+      Eigen::Map<Eigen::Matrix<double, -1, -1>> mapMat(heights_.data(),
+                                                       terrainProp_.xSamples,
+                                                       terrainProp_.ySamples);
+      Eigen::Map<Eigen::Matrix<double, -1, 1>> mapVec(heights_.data(),
+                                                      terrainProp_.xSamples * terrainProp_.ySamples,
+                                                      1);
+      Eigen::MatrixXd transMat = mapMat.transpose();
+      Eigen::Map<Eigen::Matrix<double, -1, 1>> transVec(transMat.data(), terrainProp_.xSamples * terrainProp_.ySamples, 1);
+      mapVec = transVec;
+
+      for (size_t i = 0; i < terrainProp_.xSamples; i++)
+      {
+        for (size_t j = 0; j < terrainProp_.ySamples; j++)
+        {
+          double xidx = i * pixelSize_ - terrainProp_.xSize / 2;
+          double yidx = j * pixelSize_ - terrainProp_.ySize / 2;
+          heights_[j * terrainProp_.xSamples + i] += hm_->getHeight(xidx, yidx);
+        }
+      }
+
+      world_->removeObject(hm_);
+
+      hm_ = world_->addHeightMap(terrainProp_.ySamples,
+                                 terrainProp_.xSamples,
+                                 terrainProp_.ySize,
+                                 terrainProp_.xSize, terrainProp_.xSize / 2 - 0.6, 0.0, heights_, "terrain");
+    }
+
     void randomize_sim_params()
     {
       if (randomize_friction)
@@ -685,8 +844,14 @@ namespace raisim
             rand_terrain_select = std::rand() % 100; // 2 + 1; // either step or terrains
           }
 
-          add_random_terrain();
-          
+       add_random_terrain();
+	    //  if (isEval) {
+	    //    if (rand_terrain_select < 30) add_random_terrain();
+	    //    else if (rand_terrain_select < 100) add_stairs();
+	    //  } else {
+	    //    if (rand_terrain_select < 40) add_random_terrain();
+	    //    else if (rand_terrain_select < 100) add_stairs();
+	    //  }
         }
       }
 
@@ -804,23 +969,6 @@ namespace raisim
       return r;
     }
 
-  
-    
-    double reward_tracking_pitch()
-    {
-      double tracking_sigma = 0.75;
-
-      double goal_roll = 0.5;
-      double goal_pitch = 1;
-      double goal_yaw = 0.5;
-
-      // double error = pow(goal_roll - bodyOrientation_[0],2) + pow(goal_pitch - bodyOrientation_[1], 2) + pow(goal_yaw - bodyOrientation_[2], 2);
-      double error = pow(goal_pitch - bodyOrientation_[1], 2);
-
-      return exp(-error/tracking_sigma);
-    }
-
-
     float step(const Eigen::Ref<EigenVec> &action_vec) final
     {
       step_counter += 1;
@@ -898,6 +1046,9 @@ namespace raisim
             }
           }
         }
+
+        // std::cout << "grf_bin " << grf_bin << std::endl;
+        
         // measure foot velocity
         go1_->getFrameVelocity(footFrame_[footIdx_i], footVelocity);
         go1_->getFramePosition(footFrame_[footIdx_i], footPosition);
@@ -930,33 +1081,61 @@ namespace raisim
           contact_changes += 1.0;
 
       // reward compuation
-      // forwardReward = compute_forward_reward();
+      forwardReward = compute_forward_reward();
 
-      // deltaContactReward_ = ((grf - last_contact).array().max(0).square().sum());
-      // deltaReleaseReward_ = ((grf - last_contact).array().min(0).square().sum());
-      // contactReward_ = grf.squaredNorm();
+      deltaContactReward_ = ((grf - last_contact).array().max(0).square().sum());
+      deltaReleaseReward_ = ((grf - last_contact).array().min(0).square().sum());
+      contactReward_ = grf.squaredNorm();
 
-      // contactDistReward_ = pow((find_max(swing_bin, grf) - find_min(swing_bin, grf)), 2);
+      contactDistReward_ = pow((find_max(swing_bin, grf) - find_min(swing_bin, grf)), 2);
 
       // removing torque for sideways motion
       torqueReward_ = (current_torque.squaredNorm() - pow(current_torque[6], 2) - pow(current_torque[9], 2) - pow(current_torque[12], 2) - pow(current_torque[15], 2));
 
       deltaTorqueReward_ = (current_torque.e() - last_torque.e()).squaredNorm();
       actionReward_ = action.squaredNorm();
-      // sidewaysReward_ = (pow(action[0], 2) + pow(action[3], 2) + pow(action[6], 2) + pow(action[9], 2));
-  //     jointSpeedReward_ = go1_->getGeneralizedVelocity().e().tail(nJoints_).squaredNorm();
-  //     footSlipReward_ = (foot_vel.transpose() * grf_bin).sum();
-  //     if (isDown)
-	// footSlipReward_ *= 4.;
+      sidewaysReward_ = (pow(action[0], 2) + pow(action[3], 2) + pow(action[6], 2) + pow(action[9], 2));
+      jointSpeedReward_ = go1_->getGeneralizedVelocity().e().tail(nJoints_).squaredNorm();
+      footSlipReward_ = (foot_vel.transpose() * grf_bin).sum();
+      if (isDown)
+	footSlipReward_ *= 4.;
       //std::cout << "Slip reward " << footSlipReward_ << std::endl;
-      // footClearenceReward_ = (swing_bin.transpose() * foot_pos_err).sum();
-      // contactChangeReward_ = contact_changes;
+      footClearenceReward_ = (swing_bin.transpose() * foot_pos_err).sum();
+      contactChangeReward_ = contact_changes;
       upwardReward_ = bodyOrientation_.head(2).squaredNorm();
-      // workReward_ = (go1_->getGeneralizedVelocity().e().tail(nJoints_).transpose() * current_torque.e().tail(nJoints_)).sum();
-      // yAccReward_ = pow(bodyLinearVel_[2], 2);
+      workReward_ = (go1_->getGeneralizedVelocity().e().tail(nJoints_).transpose() * current_torque.e().tail(nJoints_)).sum();
+      yAccReward_ = pow(bodyLinearVel_[2], 2);
 
-      double trackingPitch = reward_tracking_pitch();
-      // double hipPos = reward_hip_pos();
+
+      twoLegsReward = 0;
+      if (grf_bin[0] == 1)
+        {
+          twoLegsReward -= 40;
+        }
+      if (grf_bin[1] == 1) 
+        {
+          twoLegsReward -= 40;
+        }
+      
+        // if (grf_bin[2] == 0 && grf_bin[3] == 0)   
+        // {
+        //   twoLegsReward += 80;
+        // }
+
+        // if (grf_bin[0] == 1 && grf_bin[1] == 1)   
+        // {
+        //   twoLegsReward += 30;
+        // }
+
+      goal_pitch = 1;
+      goal_roll = -0.05;
+      sigma = 0.75;
+      // orientationError = pow(goal_pitch - abs(bodyOrientation_[1]), 2) + pow(goal_roll - abs(bodyOrientation_[0]), 2);
+      orientationError = pow(goal_pitch - abs(bodyOrientation_[1]), 2);
+      orientationReward = std::exp( -orientationError/sigma );
+      costOrientation = 100.0;  
+      
+      // std::cout << "roll " << bodyOrientation_[0] << std::endl;
 
       // update histories
       last_torque = VecDyn(go1_->getGeneralizedForce());
@@ -965,16 +1144,20 @@ namespace raisim
       last_foot_state = current_foot_state;
 
       // double targetSpeedRewardScale = 1.0; (forwardVelRewardCoeff_ / ((target_speed / 0.375 - 1) / targetSpeedRewardScale + 1))
+
+      // auto cumulative_reward = twoLegsReward + costOrientation * orientationReward + 
+      auto cumulative_reward = costOrientation * orientationReward + 
+                               cost_coeff * (torqueReward_ * torqueRewardCoeff_ + deltaTorqueReward_ * deltaTorqueRewardCoeff_ +
+                                             actionReward_ * actionRewardCoeff_ + + sidewaysReward_ * sidewaysRewardCoeff_);
+                                            //  upwardReward_ * upwardRewardCoeff_);
+
+
       // auto cumulative_reward = forwardReward + workReward_ * workRewardCoeff_ +
       //                          cost_coeff * (footSlipReward_ * footSlipRewardCoeff_ + torqueReward_ * torqueRewardCoeff_ + contactReward_ * contactRewardCoeff_ + deltaContactReward_ * deltaContactRewardCoeff_ + deltaReleaseReward_ * deltaReleaseRewardCoeff_ +
       //                                        deltaTorqueReward_ * deltaTorqueRewardCoeff_ + actionReward_ * actionRewardCoeff_ + jointSpeedReward_ * jointSpeedRewardCoeff_ +
       //                                        footClearenceReward_ * footClearenceRewardCoeff_ + upwardReward_ * upwardRewardCoeff_ +
       //                                        yAccReward_ * yAccRewardCoeff_ + contactDistReward_ * contactDistRewardCoeff_ +
       //                                        contactChangeReward_ * contactChangeRewardCoeff_ + sidewaysReward_ * sidewaysRewardCoeff_);
-
-      auto cumulative_reward = trackingPitch + cost_coeff * (torqueReward_ * torqueRewardCoeff_ +
-                    deltaTorqueReward_ * deltaTorqueRewardCoeff_ + actionReward_ * actionRewardCoeff_ + upwardReward_ * upwardRewardCoeff_);
-
 
       cumulative_reward /= 100;
 
@@ -1084,10 +1267,11 @@ namespace raisim
       float term_pitch = 0.2;
       if ((isTest || isSlope || isEval))
         term_pitch = 0.8;
-      if (abs(bodyOrientation_[0]) > 0.6 || abs(bodyOrientation_[1]) > term_pitch)
-      {
-        return true;
-      }
+      // // if (abs(bodyOrientation_[0]) > 0.6 || abs(bodyOrientation_[1]) > term_pitch)
+      // if (abs(bodyOrientation_[0]) > 0.6)
+      // {
+      //   return true;
+      // }
 
       double x = gc_[0];
       double y = gc_[1];
@@ -1095,17 +1279,17 @@ namespace raisim
       double term_height = 0.24;
       if ((isTest || isSlope || isEval))
         term_height = 0.1;
-      if ((gc_[2] - z_ht) < term_height)
-      {
-        return true;
-      }
+      // if ((gc_[2] - z_ht) < term_height)
+      // {
+      //   return true;
+      // }
 
       if (not sampleCmds && not isEval)
       {
-        double yaw = bodyOrientation_[2];
-        if (abs(yaw) > 0.5) {
-          return true;
-        }
+        // double yaw = bodyOrientation_[2];
+        // if (abs(yaw) > 0.5) {
+        //   return true;
+        // }
       }
 
       terminalReward = 0.f;
@@ -1257,5 +1441,13 @@ namespace raisim
     raisim::Mat<3, 3> gc_headOrientation;
     Eigen::Vector3d headLinearVel_, headAngularVel_;
     std::vector<raisim::Visuals *> visual_scan_dots;
+
+    double twoLegsReward;
+    double goal_pitch = 1.0;
+    double goal_roll = 0.0;
+    double sigma = 0.75;
+    double orientationError;
+    double orientationReward;
+    double costOrientation;
   };
 }
