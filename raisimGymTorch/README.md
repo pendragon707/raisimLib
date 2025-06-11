@@ -34,6 +34,36 @@ Papers:
 
 This code trains a policy using reinforcement learning to walk on complex terrains with minimal information. The code uses the Raisim simulator for training. Note that simulator is CPU-based.
 
+### Docker
+
+Собрать контейнер:
+```
+cd raisimLib/docker
+docker build -t rma -f RMA_Dockerfile .
+```
+
+Запуск контейнера:
+```
+cd raisimLib
+
+xhost si:localuser:root
+docker run --rm -it --ipc=host --gpus all --net=host -v .:/workspace --volume=$HOME/.Xauthority:/root/.Xauthority:rw -e NVIDIA_DRIVER_CAPABILITIES=all -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix --privileged rma bash
+```
+
+Внутри контейнера:
+```
+source /rma_entry.sh
+
+cd /workspace/raisimGymTorch
+python setup.py develop
+```
+
+Запустить обучение:
+```
+cd /workspace/raisimGymTorch/raisimGymTorch/env/envs/rsg_go1_task
+python runner.py --name random --gpu 0 --exptid 1 --overwrite
+```
+
 ### Raisim Install
 
 Please follow the [installation guide](https://raisim.com/sections/Installation.html) of raisim. Note that we do not support the latest version of raisim. Please checkout the commit `f0bb440762c09a9cc93cf6ad3a7f8552c6a4f858` after cloning raisimLib.
@@ -70,7 +100,7 @@ To start training, you can use the following commands:
 
 ```
 cd raisimLib/raisimGymTorch/raisimGymTorch/env/envs/rsg_go1_task
-python runner.py --name random --gpu 1 --exptid 1
+python runner.py --name random --gpu 0 --exptid 1
 
 python runner.py --name random --debug --exptid 1
 ```
@@ -85,7 +115,7 @@ If you wish to continue a previous run, use the following commands:
 
 ```
 cd raisimLib/raisimGymTorch/raisimGymTorch/env/envs/rsg_go1_task
-python runner.py --name random --gpu 1 --exptid 1 --loadid ITR_NBR --overwrite
+python runner.py --name random --gpu 0 --exptid 1 --loadid ITR_NBR --overwrite
 ```
 
 Third phase:
@@ -142,7 +172,7 @@ To start training, you can use the following commands:
 
 ```
 cd raisimLib/raisimGymTorch/raisimGymTorch/env/envs/dagger_go1
-python dagger.py --name cms_dagger --exptid 1 --loadpth ../../../../data/rsg_go1_task/EXPT_ID --loadid PRIV_POLICY_ID --gpu 1
+python dagger.py --name cms_dagger --exptid 1 --loadpth ../../../../data/rsg_go1_task/EXPT_ID --loadid PRIV_POLICY_ID --gpu 0
 ```
 It will take approximately 2K iterations to train a good enough policy. If you want to make any changes to the training environment, feel free to edit [this file](./raisimGymTorch/env/envs/dagger_go1/Environment.hpp). Note that every time you make changes, you need to recompile the environment (see above).
 
@@ -155,7 +185,3 @@ You can follow exactly the same steps as for the priviledged policy (but now run
 If you want to use a policy you trained on a real robot, you should first move it in the [models folder](https://github.com/antonilo/vision_locomotion/tree/master/controller/models), change the path to the model in the [launch_file](https://github.com/antonilo/vision_locomotion/blob/master/controller/launch/cms_ros.launch#L7) and the policy id in the [parameter_file](https://github.com/antonilo/vision_locomotion/blob/master/controller/parameters/default.yaml#L2). 
 
 
-```
-xhost si:localuser:root
-docker run --rm -it --ipc=host --gpus all --net=host -v .:/workspace --volume=$HOME/.Xauthority:/root/.Xauthority:rw -e NVIDIA_DRIVER_CAPABILITIES=all -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix --privileged rma-conda bash
-```
