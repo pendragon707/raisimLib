@@ -1,6 +1,6 @@
 from statistics import geometric_mean
 from ruamel.yaml import YAML, dump, RoundTripDumper
-from raisimGymTorch.env.bin import rsg_go1_ground
+from raisimGymTorch.env.bin import rsg_go1_stand
 from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
 from raisimGymTorch.helper.raisim_gym_helper import ConfigurationSaver
 import os
@@ -13,6 +13,8 @@ import numpy as np
 import torch
 import datetime
 import argparse
+
+import time
 # try:
 #     import wandb
 # except:
@@ -64,7 +66,7 @@ geomDim = int(cfg['environment']['geomDim'])*int(cfg['environment']['use_slope_d
 n_futures = int(cfg['environment']['n_futures'])
 
 # create environment from the configuration file
-env = VecEnv(rsg_go1_ground.RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
+env = VecEnv(rsg_go1_stand.RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
 
 # shortcuts
 ob_dim = env.num_obs
@@ -82,11 +84,11 @@ if use_fourier:
     fourier_value = cfg['environment']['fourier_value']
 
 # save the configuration and other files
-saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/rsg_go1_ground/" + '{:04d}'.format(args.exptid),
+saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/rsg_go1_stand/" + '{:04d}'.format(args.exptid),
                            save_items=[task_path + "/Environment.hpp", task_path + "/runner.py"], config = cfg, overwrite = args.overwrite)
 if wandb:
     wandb.init(project='command_loco', config=dict(cfg), name=args.name)
-    wandb.save(home_path + '/raisimGymTorch/env/envs/rsg_go1_ground/Environment.hpp')
+    wandb.save(home_path + '/raisimGymTorch/env/envs/rsg_go1_stand/Environment.hpp')
 
 # Training
 n_steps = math.floor(cfg['environment']['max_time'] / cfg['environment']['control_dt'])
@@ -135,22 +137,20 @@ else:
     else:
         raise NotImplementedError()
 
-# Steps + flat policy
-flat_policy_load_path = os.path.join(task_path,"../../../../data/base_policy/policy_22000.pt")
-env.load_scaling(os.path.join(task_path, "../../../../data/base_policy"),
-                 22000, policy_type=0, num_g1=n_futures, clip=clip)
+flat_policy_load_path = os.path.join(task_path,"../../../../data/rsg_go1_ground/0001/policy_26000.pt")
+env.load_scaling(os.path.join(task_path, "../../../../data/rsg_go1_ground/0001"),
+                  26000, policy_type=0, num_g1=n_futures, clip=clip)
 loaded_graph_flat = torch.jit.load(flat_policy_load_path, map_location=torch.device(device_type))
 flat_expert = ppo_module.Steps_Expert(loaded_graph_flat, device=device_type, baseDim=42,
                                       geomDim=2, n_futures=1, num_g1=n_futures)
-# Encoders loading from blind stairs policy
-checkpoint = torch.load(os.path.join(task_path,"../../../../data/base_policy/full_22000.pt"), map_location=device_type)
+
+checkpoint = torch.load(os.path.join(task_path,"../../../../data/rsg_go1_ground/0001/full_26000.pt"))
 blind_policy_state_dict = checkpoint['actor_architecture_state_dict']
 own_state = actor.architecture.state_dict()
 for name, param in blind_policy_state_dict.items():
     own_state[name].copy_(param)
-env.load_scaling(os.path.join(task_path, "../../../../data/base_policy"),
-                 22000, policy_type=2, num_g1=n_futures, clip=clip)
-
+env.load_scaling(os.path.join(task_path, "../../../../data/rsg_go1_ground/0001"),
+                 26000, policy_type=2, num_g1=n_futures, clip=clip)
 
 ppo = PPO.PPO(actor=actor,
               critic=critic,
@@ -197,11 +197,12 @@ if args.loadid is not None:
 
 
 # This coefficient controls how much the policy is optimized with RL. Change to 1 for taking away demonstrations from a previous policy.
-rl_coeff = 1
+rl_coeff = 0.3
 ppo.update_rl_coeff(rl_coeff)
 
 
-for update in range(500001) if args.loadid is None else range(args.loadid + 1, 500001):
+# for update in range(500001) if args.loadid is None else range(args.loadid + 1, 500001):
+for update in range(10) if args.loadid is None else range(args.loadid + 1, 500001):
     start = time.time()
     env.reset()
     reward_ll_sum = 0
