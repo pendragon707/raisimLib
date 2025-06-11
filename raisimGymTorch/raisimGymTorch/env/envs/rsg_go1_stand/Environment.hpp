@@ -1084,10 +1084,10 @@ namespace raisim
       float term_pitch = 0.2;
       if ((isTest || isSlope || isEval))
         term_pitch = 0.8;
-      if (abs(bodyOrientation_[0]) > 0.6 || abs(bodyOrientation_[1]) > term_pitch)
-      {
-        return true;
-      }
+      // if (abs(bodyOrientation_[0]) > 0.6 || abs(bodyOrientation_[1]) > term_pitch)
+      // {
+      //   return true;
+      // }
 
       double x = gc_[0];
       double y = gc_[1];
