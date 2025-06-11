@@ -72,7 +72,7 @@ environment:
 architecture:
   policy_net: [128, 128]
   value_net: [128, 128]
-  freeze_encoder: false
+  freeze_encoder: true
   activation: tanh
   small_init: false
   speed_vec_start_idx: 42

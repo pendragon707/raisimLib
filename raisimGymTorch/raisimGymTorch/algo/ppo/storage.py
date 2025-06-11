@@ -48,15 +48,21 @@ class RolloutStorage:
         # Core
         self.critic_obs = torch.zeros(num_transitions_per_env, num_envs, *actor_obs_shape).to(self.device)
         self.actor_obs = torch.zeros(num_transitions_per_env, num_envs, *critic_obs_shape).to(self.device)
-        self.rewards = torch.zeros(num_transitions_per_env, num_envs, 1).to(self.device)
+        # self.rewards = torch.zeros(num_transitions_per_env, num_envs, 1).to(self.device)
+        self.rewards = torch.zeros(num_transitions_per_env, num_envs, 12).to(self.device)
         self.actions = torch.zeros(num_transitions_per_env, num_envs, *actions_shape).to(self.device)
-        self.dones = torch.zeros(num_transitions_per_env, num_envs, 1).byte().to(self.device)
+        # self.dones = torch.zeros(num_transitions_per_env, num_envs, 1).byte().to(self.device)
+        self.dones = torch.zeros(num_transitions_per_env, num_envs, 12).byte().to(self.device)
 
         # For PPO
-        self.actions_log_prob = torch.zeros(num_transitions_per_env, num_envs, 1).to(self.device)
-        self.values = torch.zeros(num_transitions_per_env, num_envs, 1).to(self.device)
-        self.returns = torch.zeros(num_transitions_per_env, num_envs, 1).to(self.device)
-        self.advantages = torch.zeros(num_transitions_per_env, num_envs, 1).to(self.device)
+        # self.actions_log_prob = torch.zeros(num_transitions_per_env, num_envs, 1).to(self.device)
+        self.actions_log_prob = torch.zeros(num_transitions_per_env, num_envs, 12).to(self.device)
+        # self.values = torch.zeros(num_transitions_per_env, num_envs, 1).to(self.device)
+        self.values = torch.zeros(num_transitions_per_env, num_envs, 12).to(self.device)
+        # self.returns = torch.zeros(num_transitions_per_env, num_envs, 1).to(self.device)
+        self.returns = torch.zeros(num_transitions_per_env, num_envs, 12).to(self.device)
+        # self.advantages = torch.zeros(num_transitions_per_env, num_envs, 1).to(self.device)
+        self.advantages = torch.zeros(num_transitions_per_env, num_envs, 12).to(self.device)
 
         self.num_transitions_per_env = num_transitions_per_env
         self.num_envs = num_envs
@@ -116,11 +122,27 @@ class RolloutStorage:
         batch_size = self.num_envs * self.num_transitions_per_env
         mini_batch_size = batch_size // num_mini_batches
 
+        output = 12
+
         for batch_id in range(num_mini_batches):
+            # print("mini_batch_generator_inorder ")
+            # print( self.actions_log_prob.shape )
+            # print( self.actions_log_prob.view(-1, 1)[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size].shape )
+            # print( self.actions_log_prob.view(-1, output)[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size].shape )
+            # print( torch.squeeze(self.actions_log_prob).view(-1, output)[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size].shape )
+
+            # yield self.actor_obs.view(-1, *self.actor_obs.size()[2:])[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size], \
+            #     self.critic_obs.view(-1, *self.critic_obs.size()[2:])[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size], \
+            #     self.actions.view(-1, self.actions.size(-1))[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size], \
+            #     self.values.view(-1, 1)[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size], \
+            #     self.advantages.view(-1, 1)[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size], \
+            #     self.returns.view(-1, 1)[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size], \
+            #     self.actions_log_prob.view(-1, 1)[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size]
+
             yield self.actor_obs.view(-1, *self.actor_obs.size()[2:])[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size], \
-                self.critic_obs.view(-1, *self.critic_obs.size()[2:])[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size], \
-                self.actions.view(-1, self.actions.size(-1))[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size], \
-                self.values.view(-1, 1)[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size], \
-                self.advantages.view(-1, 1)[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size], \
-                self.returns.view(-1, 1)[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size], \
-                self.actions_log_prob.view(-1, 1)[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size]
+                  self.critic_obs.view(-1, *self.critic_obs.size()[2:])[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size], \
+                  self.actions.view(-1, self.actions.size(-1))[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size], \
+                  torch.squeeze(self.values).view(-1, output)[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size], \
+                  torch.squeeze(self.advantages).view(-1, output)[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size], \
+                  torch.squeeze(self.returns).view(-1, output)[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size], \
+                  torch.squeeze(self.actions_log_prob).view(-1, output)[batch_id*mini_batch_size:(batch_id+1)*mini_batch_size]

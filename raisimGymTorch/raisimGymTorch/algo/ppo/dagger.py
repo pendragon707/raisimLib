@@ -7,7 +7,7 @@ from .storage import ObsStorage
 
 # computes and returns the latent from the expert
 class DaggerExpert(nn.Module):
-    def __init__(self, loadpth, runid, total_obs_size, T, base_obs_size, nenvs, geomDim = 4, n_futures = 3):
+    def __init__(self, loadpth, runid, total_obs_size, T, base_obs_size, nenvs, geomDim = 4, n_futures = 3, clip = False):
         super(DaggerExpert, self).__init__()
         path = '/'.join([loadpth, 'policy_' + runid + '.pt'])
         self.policy = torch.jit.load(path)
@@ -18,6 +18,12 @@ class DaggerExpert(nn.Module):
         obs_mean = np.loadtxt(mean_pth, dtype=np.float32)
         obs_var = np.loadtxt(var_pth, dtype=np.float32)
         # cut it
+        print(obs_mean.shape)
+
+        if clip:            
+            obs_mean = np.expand_dims( obs_mean, axis=0 )
+            obs_var = np.expand_dims( obs_var, axis=0 )
+
         obs_mean = obs_mean[:,obs_mean.shape[1]//2:]
         obs_var = obs_var[:,obs_var.shape[1]//2:]
         self.mean = self.get_tiled_scales(obs_mean, nenvs, total_obs_size, base_obs_size, T)
@@ -145,6 +151,15 @@ class DaggerAgent:
         self.prop_latent_encoder.to(self.device)
         #self.geom_latent_encoder.to(self.device)
         self.student_mlp.to(self.device)
+
+    def save_deterministic_graph_temp(self, 
+                                 fname_mlp, example_input, device='cpu'):
+        hlen = self.base_obs_size * self.T
+
+        mlp_graph = torch.jit.trace(self.student_mlp.architecture.to(device), example_input[:, hlen:])
+        torch.jit.save(mlp_graph, fname_mlp)
+        
+        self.student_mlp.to(self.device)        
 
 class DaggerTrainer:
     def __init__(self,

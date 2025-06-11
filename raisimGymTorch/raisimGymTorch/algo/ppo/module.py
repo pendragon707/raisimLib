@@ -65,6 +65,9 @@ class Actor:
         self.device = device
 
     def sample(self, obs):
+        # print("forward Actor (sample)")
+        # print( obs.shape )
+
         logits = self.architecture.architecture(obs)
         actions, log_prob = self.distribution.sample(logits)
         return actions.cpu().detach(), log_prob.cpu().detach()
@@ -183,7 +186,7 @@ class Action_MLP_Encode_wrap(nn.Module):
 
 class MLPEncode(nn.Module):
     def __init__(self, shape, actionvation_fn, input_size, output_size, output_activation_fn = None, small_init= False, base_obdim = 45, geom_dim = 0,
-                 n_futures = 3):
+                 n_futures = 3, dagger_prop_encoder = None, dagger_action_mlp = None):
         super(MLPEncode, self).__init__()
         self.activation_fn = actionvation_fn
         self.output_activation_fn = output_activation_fn
@@ -191,6 +194,9 @@ class MLPEncode(nn.Module):
         regular_obs_dim = base_obdim;
         self.regular_obs_dim = regular_obs_dim;
         self.geom_dim = geom_dim
+        
+        self.dagger_prop_encoder =  dagger_prop_encoder
+        self.dagger_action_mlp =  dagger_action_mlp
         
         ## Encoder Architecture
         prop_latent_dim = 8
@@ -247,27 +253,83 @@ class MLPEncode(nn.Module):
 
     def forward(self, x):
         # get only the x related to the control policy
-        if x.shape[1] > 130:
+        if x.shape[1] > 130 and x.shape[1] < 2000:
             # Hacky way to detect where you are (dagger or not)
             # TODO: improve on this!
             x = x[:,x.shape[1]//2:]
-        prop_latent = self.prop_encoder(x[:,self.regular_obs_dim:-self.geom_dim*(self.n_futures+1) -1])
-        geom_latents = []
-        for i in reversed(range(self.n_futures+1)):
-            start = -(i+1)*self.geom_dim -1
-            end = -i*self.geom_dim -1
-            if (end == 0): 
-                end = None
-            geom_latent = self.geom_encoder(x[:,start:end])
-            geom_latents.append(geom_latent)
-        geom_latents = torch.hstack(geom_latents)
-        return self.action_mlp(torch.cat([x[:,:self.regular_obs_dim], prop_latent, geom_latents], 1))
+
+        # print("forward start")
+
+        if not self.dagger_prop_encoder:
+            # print( x.shape )
+            # print( x[:,self.regular_obs_dim:-self.geom_dim*(self.n_futures+1) -1].shape )
+            # print( x[:,:self.regular_obs_dim].shape )
+
+            prop_latent = self.prop_encoder(x[:,self.regular_obs_dim:-self.geom_dim*(self.n_futures+1) -1])
+            geom_latents = []
+            for i in reversed(range(self.n_futures+1)):
+                start = -(i+1)*self.geom_dim -1
+                end = -i*self.geom_dim -1
+                if (end == 0): 
+                    end = None
+                geom_latent = self.geom_encoder(x[:,start:end])
+                geom_latents.append(geom_latent)
+            geom_latents = torch.hstack(geom_latents)
+
+            # print( geom_latents.shape )
+            
+            # print( torch.cat([x[:,:self.regular_obs_dim], prop_latent, geom_latents], 1).shape )
+            return self.action_mlp(torch.cat([x[:,:self.regular_obs_dim], prop_latent, geom_latents], 1))
+        else:
+            # print("DAGGER prop_encoder")
+            # print( x.shape )
+
+            # print("regular_obs_dim ", self.regular_obs_dim)
+            # print("geom_dim ", self.geom_dim)
+            # print("n_futures ", self.n_futures)   
+
+            # print( x[:,:42*50].shape )  
+             
+            try:                                         
+
+                prop_latent = self.dagger_prop_encoder(x[:,:42*50])     
+                output = torch.cat([x[:,42*50:42*(50 + 1)], prop_latent], 1)
+
+                # print( "output ", output.shape )
+                return self.dagger_action_mlp(output)   
+            except:
+                print("DAGGER prop_encoder")
+                print( "x ", x.shape )
+
+                print("regular_obs_dim ", self.regular_obs_dim)
+                print("geom_dim ", self.geom_dim)
+                print("n_futures ", self.n_futures)   
+
+                print( "x[:,:42*50].shape ", x[:,:42*50].shape )  
+
+                print( "x ", x[:,self.regular_obs_dim:-self.geom_dim*(self.n_futures+1) -1].shape )
+                print( "x ", x[:,:self.regular_obs_dim].shape )
+
+                prop_latent = self.prop_encoder(x[:,self.regular_obs_dim:-self.geom_dim*(self.n_futures+1) -1])
+                geom_latents = []
+                for i in reversed(range(self.n_futures+1)):
+                    start = -(i+1)*self.geom_dim -1
+                    end = -i*self.geom_dim -1
+                    if (end == 0): 
+                        end = None
+                    geom_latent = self.geom_encoder(x[:,start:end])
+                    geom_latents.append(geom_latent)
+                geom_latents = torch.hstack(geom_latents)
+
+                
+                print( "x torch.cat ", torch.cat([x[:,:self.regular_obs_dim], prop_latent, geom_latents], 1).shape )
+                return self.action_mlp(torch.cat([x[:,:self.regular_obs_dim], prop_latent, geom_latents], 1))
 
 class MLPEncode_wrap(nn.Module):
     def __init__(self, shape, actionvation_fn, input_size, output_size, output_activation_fn = None,
-                 small_init= False, base_obdim = 45, geom_dim = 0, n_futures = 3):
+                 small_init= False, base_obdim = 45, geom_dim = 0, n_futures = 3, dagger_prop_encoder = None, dagger_action_mlp = None):
         super(MLPEncode_wrap, self).__init__()
-        self.architecture = MLPEncode(shape, actionvation_fn, input_size, output_size, output_activation_fn, small_init, base_obdim, geom_dim, n_futures)
+        self.architecture = MLPEncode(shape, actionvation_fn, input_size, output_size, output_activation_fn, small_init, base_obdim, geom_dim, n_futures, dagger_prop_encoder, dagger_action_mlp)
         self.input_shape = self.architecture.input_shape
         self.output_shape = self.architecture.output_shape
 
@@ -380,10 +442,18 @@ class MultivariateGaussianDiagonalCovariance(nn.Module):
         return samples, log_prob
 
     def evaluate(self, inputs, logits, outputs):
+        # print("MultivariateGaussianDiagonalCovariance evaluate ")
+        # print( "logits ", logits.shape )
         distribution = Normal(logits, self.std.reshape(self.dim))
 
-        actions_log_prob = distribution.log_prob(outputs).sum(dim=1)
-        entropy = distribution.entropy().sum(dim=1)
+        # actions_log_prob = distribution.log_prob(outputs).sum(dim=1)
+        # entropy = distribution.entropy().sum(dim=1)
+
+        actions_log_prob = distribution.log_prob(outputs)
+        entropy = distribution.entropy()
+
+        # print( "entropy ", entropy.shape )
+        # print( "actions_log_prob ", actions_log_prob.shape )
 
         return actions_log_prob, entropy
 

@@ -60,14 +60,13 @@ class RaisimGymVecEnv:
 
         print( "loaded_mean ", loaded_mean.shape )
 
-        if clip:
+        if clip:            
             loaded_mean = np.expand_dims( loaded_mean[1,:], axis=0 )
             loaded_var = np.expand_dims( loaded_var[1,:], axis=0 )
 
-
         if expand:
             loaded_mean = np.expand_dims( loaded_mean, axis=0 )
-            loaded_var = np.expand_dims( loaded_var, axis=0 )            
+            loaded_var = np.expand_dims( loaded_var, axis=0 )
 
         print( "loaded_mean ", loaded_mean.shape )
 
