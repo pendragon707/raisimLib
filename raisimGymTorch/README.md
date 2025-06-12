@@ -34,6 +34,36 @@ Papers:
 
 This code trains a policy using reinforcement learning to walk on complex terrains with minimal information. The code uses the Raisim simulator for training. Note that simulator is CPU-based.
 
+### Docker
+
+Собрать контейнер:
+```
+cd raisimLib/docker
+docker build -t rma -f RMA_Dockerfile .
+```
+
+Запуск контейнера:
+```
+cd raisimLib
+
+xhost si:localuser:root
+docker run --rm -it --ipc=host --gpus all --net=host -v .:/workspace --volume=$HOME/.Xauthority:/root/.Xauthority:rw -e NVIDIA_DRIVER_CAPABILITIES=all -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix --privileged rma bash
+```
+
+Внутри контейнера:
+```
+source /rma_entry.sh
+
+cd /workspace/raisimGymTorch
+python setup.py develop
+```
+
+Запустить обучение:
+```
+cd /workspace/raisimGymTorch/raisimGymTorch/env/envs/rsg_go1_task
+python runner.py --name random --gpu 0 --exptid 1 --overwrite
+```
+
 ### Raisim Install
 
 Please follow the [installation guide](https://raisim.com/sections/Installation.html) of raisim. Note that we do not support the latest version of raisim. Please checkout the commit `f0bb440762c09a9cc93cf6ad3a7f8552c6a4f858` after cloning raisimLib.
