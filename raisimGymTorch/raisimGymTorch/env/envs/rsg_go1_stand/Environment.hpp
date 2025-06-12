@@ -972,7 +972,7 @@ namespace raisim
       //                                        yAccReward_ * yAccRewardCoeff_ + contactDistReward_ * contactDistRewardCoeff_ +
       //                                        contactChangeReward_ * contactChangeRewardCoeff_ + sidewaysReward_ * sidewaysRewardCoeff_);
 
-      auto cumulative_reward = trackingPitch + cost_coeff * (torqueReward_ * torqueRewardCoeff_ +
+      auto cumulative_reward = 60 * trackingPitch + cost_coeff * (torqueReward_ * torqueRewardCoeff_ +
                     deltaTorqueReward_ * deltaTorqueRewardCoeff_ + actionReward_ * actionRewardCoeff_ + upwardReward_ * upwardRewardCoeff_);
 
 

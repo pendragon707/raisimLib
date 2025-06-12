@@ -1,6 +1,6 @@
 from statistics import geometric_mean
 from ruamel.yaml import YAML, dump, RoundTripDumper
-from raisimGymTorch.env.bin import rsg_go1_ground
+from raisimGymTorch.env.bin import rsg_go1_stand
 from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
 from raisimGymTorch.helper.raisim_gym_helper import ConfigurationSaver
 import os
@@ -64,7 +64,7 @@ geomDim = int(cfg['environment']['geomDim'])*int(cfg['environment']['use_slope_d
 n_futures = int(cfg['environment']['n_futures'])
 
 # create environment from the configuration file
-env = VecEnv(rsg_go1_ground.RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
+env = VecEnv(rsg_go1_stand.RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
 
 # shortcuts
 ob_dim = env.num_obs
@@ -82,11 +82,11 @@ if use_fourier:
     fourier_value = cfg['environment']['fourier_value']
 
 # save the configuration and other files
-saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/rsg_go1_ground/" + '{:04d}'.format(args.exptid),
+saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/rsg_go1_stand/" + '{:04d}'.format(args.exptid),
                            save_items=[task_path + "/Environment.hpp", task_path + "/runner.py"], config = cfg, overwrite = args.overwrite)
 if wandb:
     wandb.init(project='command_loco', config=dict(cfg), name=args.name)
-    wandb.save(home_path + '/raisimGymTorch/env/envs/rsg_go1_ground/Environment.hpp')
+    wandb.save(home_path + '/raisimGymTorch/env/envs/rsg_go1_stand/Environment.hpp')
 
 # Training
 n_steps = math.floor(cfg['environment']['max_time'] / cfg['environment']['control_dt'])
