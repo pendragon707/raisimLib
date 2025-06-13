@@ -16,6 +16,7 @@ MACRO(SUBDIRLIST result curdir)
     LIST(APPEND dirlist rsg_go1_stand_two_legs)
     LIST(APPEND dirlist dagger_go1)
     LIST(APPEND dirlist debug_go1)
+    LIST(APPEND dirlist rot_exp4_dagger)
     SET(${result} ${dirlist})
 ENDMACRO()
 
