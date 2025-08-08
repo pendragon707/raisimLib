@@ -7,7 +7,7 @@ from .storage import ObsStorage
 
 # computes and returns the latent from the expert
 class DaggerExpert(nn.Module):
-    def __init__(self, loadpth, runid, total_obs_size, T, base_obs_size, nenvs, geomDim = 4, n_futures = 3):
+    def __init__(self, loadpth, runid, total_obs_size, T, base_obs_size, nenvs, geomDim = 4, n_futures = 3, clip = False, expand = False):
         super(DaggerExpert, self).__init__()
         path = '/'.join([loadpth, 'policy_' + runid + '.pt'])
         self.policy = torch.jit.load(path)
@@ -17,6 +17,15 @@ class DaggerExpert(nn.Module):
         var_pth = loadpth + "/var" + runid + ".csv"
         obs_mean = np.loadtxt(mean_pth, dtype=np.float32)
         obs_var = np.loadtxt(var_pth, dtype=np.float32)
+
+        if clip:
+            obs_mean = np.expand_dims( obs_mean[1,:], axis=0 )
+            obs_var = np.expand_dims( obs_var[1,:], axis=0 )
+
+        if expand:
+            obs_mean = np.expand_dims( obs_mean, axis=0 )
+            obs_var = np.expand_dims( obs_var, axis=0 )     
+
         # cut it
         obs_mean = obs_mean[:,obs_mean.shape[1]//2:]
         obs_var = obs_var[:,obs_var.shape[1]//2:]
