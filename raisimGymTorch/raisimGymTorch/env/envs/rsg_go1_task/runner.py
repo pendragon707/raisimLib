@@ -203,8 +203,7 @@ rl_coeff = 0.3
 ppo.update_rl_coeff(rl_coeff)
 
 
-# for update in range(500001) if args.loadid is None else range(args.loadid + 1, 500001):
-for update in range(10) if args.loadid is None else range(args.loadid + 1, 500001):
+for update in range(500001) if args.loadid is None else range(args.loadid + 1, 500001):
     start = time.time()
     env.reset()
     reward_ll_sum = 0
