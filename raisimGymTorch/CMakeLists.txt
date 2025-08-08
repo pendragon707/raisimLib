@@ -9,6 +9,8 @@ SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/raisimGymTorch/en
 MACRO(SUBDIRLIST result curdir)
     SET(dirlist "")
     LIST(APPEND dirlist rsg_go1_task)
+    LIST(APPEND dirlist rsg_go1_turn_new)
+    LIST(APPEND dirlist dagger_go1_turn_new)
     LIST(APPEND dirlist rsg_go1_left)
     LIST(APPEND dirlist rsg_go1_back)
     LIST(APPEND dirlist rsg_go1_ground)
