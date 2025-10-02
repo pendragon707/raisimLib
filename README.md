@@ -11,6 +11,7 @@ docker build -t rma -f RMA_Dockerfile .
 ```
 
 Запуск контейнера:
+
 ```
 cd raisimLib
 
@@ -27,34 +28,7 @@ python setup.py develop
 ```
 
 Запустить обучение:
-```
-cd /workspace/raisimGymTorch/raisimGymTorch/env/envs/rsg_go1_task
-python runner.py --name random --gpu 0 --exptid 1 --overwrite
-```### Docker
 
-Собрать контейнер:
-```
-cd raisimLib/docker
-docker build -t rma -f RMA_Dockerfile .
-```
-
-Запуск контейнера:
-```
-cd raisimLib
-
-xhost si:localuser:root
-docker run --rm -it --ipc=host --gpus all --net=host -v .:/workspace --volume=$HOME/.Xauthority:/root/.Xauthority:rw -e NVIDIA_DRIVER_CAPABILITIES=all -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix --privileged rma bash
-```
-
-Внутри контейнера:
-```
-source /rma_entry.sh
-
-cd /workspace/raisimGymTorch
-python setup.py develop
-```
-
-Запустить обучение:
 ```
 cd /workspace/raisimGymTorch/raisimGymTorch/env/envs/rsg_go1_task
 python runner.py --name random --gpu 0 --exptid 1 --overwrite
