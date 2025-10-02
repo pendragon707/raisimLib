@@ -1,4 +1,4 @@
-# Copy of Cross-Modal Supervision (Policy Training Code using RMA) for Go1
+# Copy of Cross-Modal Supervision (Policy Training Code using RMA) 
 
 This repo builds on the code from ```RMA: Rapid Motor Adaptation for Legged Robots``` to train the locomotion policy associated with the paper ```Learning Visual Locomotion with Cross-Modal Supervision```.
 For more information, please check the [RMA project page](https://ashish-kmr.github.io/rma-legged-robots/) and [CMS project webpage](https://antonilo.github.io/vision_locomotion/). For using the policy on a real robot, please refer to [this repository](https://github.com/antonilo/vision_locomotion).
@@ -73,16 +73,6 @@ Please follow the [installation guide](https://raisim.com/sections/Installation.
 Run the following commands to install the training environments
 
 ```
-cd raisimLib
-git clone git@github.com:antonilo/rl_locomotion.git
-rm -rf raisimGymTorch
-mv rl_locomotion raisimGymTorch
-cd raisimGymTorch
-mv rl_locomotion/raisimGymTorch ..
-rm -r rl_locomotion
-cd ..
-mv raisimGymTorch/go1 rsc/
-cd raisimGymTorch
 # You might want to create a new conda environment if you did not do it already for the vision part
 conda create --name cms python=3.8
 conda activate cms
