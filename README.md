@@ -1,40 +1,30 @@
 # RMA
 
-## Установка с использованием Docker
+###  Установка с использованием Docker (вариант 1)
 
-В файле `docker/rma_entry.sh` замените версию cuda на ту, что у вас утсановлена (можете проверить её через `nvidia-smi`)
-
-Собрать контейнер:
-```
-cd raisimLib/docker
-docker build -t rma -f RMA_Dockerfile .
-```
-
-Запуск контейнера:
-
-```
-cd raisimLib
-
+Внутри директории ```raisimLib``` запускаем
+```bash
 xhost si:localuser:root
-docker run --rm -it --ipc=host --gpus all --net=host -v .:/workspace --volume=$HOME/.Xauthority:/root/.Xauthority:rw -e NVIDIA_DRIVER_CAPABILITIES=all -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix --privileged rma bash
+
+export PYTORCH_CUDA_VERSION=$(ls /usr/local | grep -E 'cuda-[0-9]+\.[0-9]+$' | head -n1 | sed 's/cuda-//')
+docker compose up --build
 ```
 
 Внутри контейнера:
 ```
-source /rma_entry.sh
-
-cd /workspace/raisimGymTorch
-python setup.py develop
+chmod +x /workspace/rma_entry.sh
+/workspace/rma_entry.sh
 ```
 
 Запустить обучение:
-
 ```
-cd /workspace/raisimGymTorch/raisimGymTorch/env/envs/rsg_go1_task
+cd /workspace/rma/raisimGymTorch/raisimGymTorch/env/envs/rsg_go1_task
 python runner.py --name random --gpu 0 --exptid 1 --overwrite
 ```
 
-## Установка без использования Docker
+###  Установка без использования Docker (вариант 2)
+
+Run the following commands to install the training environments
 
 ```
 # You might want to create a new conda environment if you did not do it already for the vision part
@@ -43,14 +33,7 @@ conda activate cms
 pip install -e .
 
 # installation of the environments
-cd raisimLib/raisimGymTorch
 python setup.py develop
-```
-
-Запустить обучение: 
-```
-cd raisimLib/raisimGymTorch/raisimGymTorch/env/envs/rsg_go1_task
-python runner.py --name random --gpu 1 --exptid 1
 ```
 
 ### Training a policy with priviledged information

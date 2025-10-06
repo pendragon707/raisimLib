@@ -1,9 +1,9 @@
 #!/bin/bash
 
-source /root/miniconda3/bin/activate
+source /root/miniconda3/etc/profile.d/conda.sh
 conda activate rma
 
-pip install cbor2 mujoco crcmod
-conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
+cd /workspace/rma/raisimGymTorch
+pip install -e .
 
-cd /workspace
+python setup.py develop
